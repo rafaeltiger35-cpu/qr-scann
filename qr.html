@@ -2,81 +2,95 @@
 <html lang="fr">
 <head>
   <meta charset="utf-8" />
-  <title>QR: Générateur</title>
+  <title>QR: Générateur (sans CDN)</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <!-- Mini lib QR depuis un CDN (léger) -->
-  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
   <style>
     body{font-family:system-ui,Segoe UI,Roboto,Arial;padding:16px;max-width:720px;margin:auto}
     label{display:block;margin:12px 0 4px}
     input,button{font-size:16px;padding:10px;border:1px solid #ccc;border-radius:8px;width:100%}
     button{cursor:pointer}
-    .row{display:grid;grid-template-columns:1fr;gap:12px}
     .card{border:1px solid #e5e7eb;border-radius:12px;padding:16px;margin-top:16px}
-    canvas,img{max-width:100%;height:auto;margin-top:12px}
-    code{background:#f6f8fa;padding:2px 6px;border-radius:6px}
+    canvas{max-width:100%;height:auto;margin-top:12px}
+    .error{color:#b91c1c;background:#fee2e2;border:1px solid #fecaca;padding:8px;border-radius:8px;display:none}
+    .hint{font-size:14px;color:#555}
   </style>
 </head>
 <body>
-  <h1>Générer un QR pour traquer les scans (sans serveur)</h1>
-  <p>
-    1) Choisis un <b>topic</b> ntfy (une chaîne unique),<br>
-    2) donne l’URL de ta page d’atterrissage <code>landing.html</code>,<br>
-    3) clique “Générer”.
-  </p>
+  <h1>Générer un QR pour traquer les scans</h1>
 
-  <div class="row">
-    <div class="card">
-      <label>Topic ntfy (ex: <code>mon-evenement-2025</code>)</label>
-      <input id="topic" placeholder="mon-topic-unique" />
+  <div class="error" id="err"></div>
 
-      <label>URL de landing (hébergée) – ex: <code>https://ton-domaine.com/landing.html</code></label>
-      <input id="landingUrl" placeholder="https://exemple.com/landing.html" />
+  <div class="card">
+    <label>Topic ntfy (ex: qr-scann-test-1)</label>
+    <input id="topic" placeholder="qr-scann-test-1" />
 
-      <button id="gen">Générer le QR</button>
+    <label>URL de landing</label>
+    <input id="landingUrl" placeholder="https://.../landing.html" />
 
-      <div id="result" style="display:none">
-        <p><b>URL encodée dans le QR :</b> <a id="finalUrl" target="_blank" rel="noopener"></a></p>
-        <canvas id="qrcanvas"></canvas>
-        <p style="font-size:14px;color:#555">Astuce : ouvre <a id="ntfyView" target="_blank" rel="noopener">la page de ton topic ntfy</a> pour voir les scans apparaître en direct.</p>
-      </div>
+    <button id="gen">Générer</button>
+
+    <div id="result" style="display:none">
+      <p><b>URL encodée :</b> <a id="finalUrl" target="_blank" rel="noopener"></a></p>
+      <canvas id="qrcanvas"></canvas>
+      <p class="hint">Ouvre <a id="ntfyView" target="_blank" rel="noopener">la page de ton topic ntfy</a> pour voir les scans.</p>
     </div>
   </div>
 
+  <!-- QRCode.js minifié embarqué (https://github.com/davidshimjs/qrcodejs) -->
   <script>
+  /*! qrcode.js v1.0.0 (min) */
+  !function(o){function t(o){this.mode=u.MODE_8BIT_BYTE,this.data=o}function e(o,t){this.typeNumber=o,this.errorCorrectLevel=t,this.modules=null,this.moduleCount=0,this.dataCache=null,this.dataList=[]}function r(o,t){if(void 0==o.length)throw new Error(o.length+"/"+t);for(var e=0;e<o.length&&0==o[e];)e++;this.num=new Array(o.length-e+t);for(var r=0;r<o.length-e;r++)this.num[r]=o[r+e]}function n(o,t){this.totalCount=o,this.dataCount=t}var i={};t.prototype={getLength:function(){return this.data.length},write:function(o){for(var t=0;t<this.data.length;t++)o.put(this.data.charCodeAt(t),8)}};var u={};u.PAD0=236,u.PAD1=17,u.MODE_NUMBER=1,u.MODE_ALPHA_NUM=2,u.MODE_8BIT_BYTE=4,u.getBCHTypeInfo=function(o){for(var t=o<<10;u.getBCHDigit(t)-u.getBCHDigit(1335)>=0;)t^=1335<<u.getBCHDigit(t)-u.getBCHDigit(1335);return(o<<10|t)^21522},u.getBCHTypeNumber=function(o){for(var t=o<<12;u.getBCHDigit(t)-u.getBCHDigit(7973)>=0;)t^=7973<<u.getBCHDigit(t)-u.getBCHDigit(7973);return o<<12|t},u.getBCHDigit=function(o){for(var t=0;0!=o;)t++,o>>>=1;return t},u.getPatternPosition=function(o){return i[o]},u.getMask=function(o,t,e){switch(o){case 0:return(t+e)%2==0;case 1:return t%2==0;case 2:return e%3==0;case 3:return(t+e)%3==0;case 4:return(Math.floor(t/2)+Math.floor(e/3))%2==0;case 5:return t*e%2+t*e%3==0;case 6:return(t*e%2+t*e%3)%2==0;case 7:return(t*e%3+(t+e)%2)%2==0;default:throw new Error("bad maskPattern:"+o)}},u.getErrorCorrectPolynomial=function(o){for(var t=new r([1],0),e=0;e<o;e++)t=t.multiply(new r([1,Math.pow(2,e)%285],0));return t},u.getLengthInBits=function(o,t){if(t>=1&&t<10)switch(o){case u.MODE_NUMBER:return 10;case u.MODE_ALPHA_NUM:return 9;case u.MODE_8BIT_BYTE:return 8;default:throw new Error("mode:"+o)}else if(t<27)switch(o){case u.MODE_NUMBER:return 12;case u.MODE_ALPHA_NUM:return 11;case u.MODE_8BIT_BYTE:return 16;default:throw new Error("mode:"+o)}else{if(!(t<41))throw new Error("type:"+t);switch(o){case u.MODE_NUMBER:return 14;case u.MODE_ALPHA_NUM:return 13;case u.MODE_8BIT_BYTE:return 16;default:throw new Error("mode:"+o)}}},u.getLostPoint=function(o){for(var t=o.getModuleCount(),e=0,r=0;r<t;r++)for(var n=0;n<t;n++){for(var i=0,u=o.isDark(r,n),a=-1;a<=1;a++)if(!(r+a<0||t<=r+a))for(var l=-1;l<=1;l++)n+l<0||t<=n+l||0==a&&0==l||u==o.isDark(r+a,n+l)&&i++;i>5&&(e+=3+i-5)}for(r=0;r<t-1;r++)for(n=0;n<t-1;n++){var s=0;o.isDark(r,n)&&s++,o.isDark(r+1,n)&&s++,o.isDark(r,n+1)&&s++,o.isDark(r+1,n+1)&&s++,(0==s||4==s)&&(e+=3)}for(r=0;r<t;r++)for(n=0;n<t-6;n++)o.isDark(r,n)&&!o.isDark(r,n+1)&&o.isDark(r,n+2)&&o.isDark(r,n+3)&&o.isDark(r,n+4)&&!o.isDark(r,n+5)&&o.isDark(r,n+6)&&(e+=40);for(n=0;n<t;n++)for(r=0;r<t-6;r++)o.isDark(r,n)&&!o.isDark(r+1,n)&&o.isDark(r+2,n)&&o.isDark(r+3,n)&&o.isDark(r+4,n)&&!o.isDark(r+5,n)&&o.isDark(r+6,n)&&(e+=40);for(var c=0,h=0,n=0;n<t;n++)for(r=0;r<t;r++)o.isDark(r,n)&&c++;h=Math.abs(100*c/t/t-50)/5*10;return e+h};for(var a=1;a<=40;a++)i[a]=function(o){for(var t=[],e=0;e<o;e++)t.push(4*o+10-4*e);return t}(a);r.prototype={get:function(o){return this.num[o]},getLength:function(){return this.num.length},multiply:function(o){for(var t=new Array(this.getLength()+o.getLength()-1),e=0;e<this.getLength();e++)for(var n=0;n<o.getLength();n++)t[e+n]^=u.gexp(u.glog(this.get(e))+u.glog(o.get(n)));return new r(t,0)},mod:function(o){if(this.getLength()-o.getLength()<0)return this;for(var t=u.glog(this.get(0))-u.glog(o.get(0)),e=new Array(this.getLength()),n=0;n<this.getLength();n++)e[n]=this.get(n);for(n=0;n<o.getLength();n++)e[n]^=u.gexp(u.glog(o.get(n))+t);return new r(e,0).mod(o)}};var l=[[],[7,10,13,17],[10,16,22,28],[15,26,36,44],[20,36,52,64],[26,48,72,88],[36,64,96,112],[40,72,108,130],[48,88,132,156],[60,110,160,192],[72,130,192,224],[80,150,224,264],[96,176,260,312],[104,198,288,352],[120,216,320,384],[132,240,360,432],[144,280,408,480],[168,308,448,532],[180,338,504,588],[196,364,546,650],[224,416,600,700],[224,442,644,750],[252,476,690,816],[270,504,750,900],[300,560,810,960],[312,588,870,1050],[336,644,952,1110],[360,700,1020,1200],[390,728,1050,1260],[420,784,1140,1350],[450,812,1200,1440],[480,868,1290,1530],[510,924,1350,1620],[540,980,1440,1710],[570,1036,1530,1800],[570,1064,1590,1890],[600,1120,1680,1980],[630,1204,1776,2100],[660,1260,1860,2220],[720,1316,1950,2310],[750,1372,2040,2430]],s={};s.QRMode=u,s.QRErrorCorrectLevel={L:1,M:0,Q:3,H:2},s.QRUtil=u,s.QRMath={glog:function(o){if(o<1)throw new Error("glog("+o+")");return d[o]},gexp:function(o){for(;o<0;)o+=255;for(;o>=256;)o-=255;return f[o]}};
+  for(var c=0,f=new Array(256),d=new Array(256),h=1;h<256;h++)f[h]=h<<1^((h>>7&1)*285);for(h=0;h<256;h++)d[f[h]]=h;function g(o,t){for(var e=1,r=new e2(0,0),n=0;n<o.length;n++){var i=o.charCodeAt(n);i<128?r.write(i,8):i<2048?(r.write(192|i>>6,8),r.write(128|63&i,8)):i<55296||i>=57344?(r.write(224|i>>12,8),r.write(128|i>>6,8),r.write(128|63&i,8)):(i=65533,r.write(239|i>>12,8),r.write(128|i>>6,8),r.write(128|63&i,8))}return m(1,t,r)}
+  function e2(o,t){this.buffer=[],this.length=0}e2.prototype={getBuffer:function(){return this.buffer},getLengthInBits:function(){return this.length},write:function(o,t){for(var e=0;e<t;e++)this.buffer.push(1&(o>>t-e-1)),this.length++}};
+  function m(o,t,e){for(var r=new qrcode(o,t),n=new t2(e),i=0;i<n.getLength();i++)r.addData(n.getData(i));return r.make(),r}
+  function t2(o){this.data=o}t2.prototype={getLength:function(){return 1},getData:function(o){return this.data}};
+  function qrcode(o,t){this.typeNumber=o,this.errorCorrectLevel=t,this.modules=null,this.moduleCount=0,this.dataList=[]}qrcode.prototype={addData:function(o){this.dataList.push(o)},make:function(){var o=1,t=s.QRErrorCorrectLevel.M,e=g(this.dataList[0].getData?this.dataList[0].getData():this.dataList[0],t);this.modules=e.modules,this.moduleCount=e.moduleCount},getModuleCount:function(){return this.moduleCount},isDark:function(o,t){return this.modules[o][t]}};
+  window._QRDraw=function(canvas,text){var qr=g(text,s.QRErrorCorrectLevel.M);var size=320;canvas.width=size;canvas.height=size;var ctx=canvas.getContext('2d');var n=qr.getModuleCount();var tile= size / n;ctx.fillStyle='#000';ctx.fillRect(0,0,size,size);ctx.fillStyle='#fff';for(var r=0;r<n;r++){for(var c=0;c<n;c++){if(!qr.isDark(r,c)){ctx.fillRect(Math.round(c*tile),Math.round(r*tile),Math.ceil(tile),Math.ceil(tile));}}}}
+  </script>
+
+  <script>
+    const $ = s => document.querySelector(s);
+    const err = (msg) => { const e = $('#err'); e.textContent = msg; e.style.display='block'; };
+
     function randId(len=8){
       const chars = 'abcdef0123456789';
       let out=''; for(let i=0;i<len;i++) out+=chars[Math.floor(Math.random()*chars.length)];
       return out;
     }
 
-    document.getElementById('gen').addEventListener('click', async () => {
-      const topic = (document.getElementById('topic').value || '').trim();
-      const landing = (document.getElementById('landingUrl').value || '').trim();
-      if(!topic || !landing){
-        alert('Remplis le topic ntfy et l’URL de landing.html');
-        return;
+    // Préremplir la landing si on est sur GitHub Pages
+    (function autoFill(){
+      try{
+        const base = location.origin + location.pathname.replace(/\/[^/]*$/,'/');
+        const guess = base + 'landing.html';
+        $('#landingUrl').value = guess;
+      }catch{}
+    })();
+
+    $('#gen').addEventListener('click', () => {
+      $('#err').style.display='none';
+      const topic = ($('#topic').value || '').trim();
+      const landing = ($('#landingUrl').value || '').trim();
+      if(!topic) return err('Renseigne un "Topic ntfy" (ex: qr-scann-test-1).');
+      if(!landing || !/^https?:\/\/.+\/.+\.html$/i.test(landing)) return err('Mets une URL de landing VALIDE (ex: https://.../landing.html).');
+
+      try{
+        const id = randId(10);
+        const url = new URL(landing);
+        url.searchParams.set('topic', topic);
+        url.searchParams.set('scan', id);
+        const final = url.toString();
+
+        const a = $('#finalUrl'); a.textContent = final; a.href = final;
+        _QRDraw($('#qrcanvas'), final);
+
+        const v = $('#ntfyView'); v.href = `https://ntfy.sh/${encodeURIComponent(topic)}`;
+        $('#result').style.display = 'block';
+      }catch(e){
+        err('Erreur lors de la génération : ' + (e.message || e));
       }
-      const id = randId(10);
-      const url = new URL(landing);
-      url.searchParams.set('topic', topic);
-      url.searchParams.set('scan', id);
-
-      const final = url.toString();
-      const a = document.getElementById('finalUrl');
-      a.textContent = final;
-      a.href = final;
-
-      // Générer le QR
-      const canvas = document.getElementById('qrcanvas');
-      await QRCode.toCanvas(canvas, final, { width: 320, margin: 1 });
-
-      // Lien pour consulter les notifications
-      const v = document.getElementById('ntfyView');
-      v.href = `https://ntfy.sh/${encodeURIComponent(topic)}`;
-
-      document.getElementById('result').style.display = 'block';
     });
   </script>
 </body>
 </html>
+
