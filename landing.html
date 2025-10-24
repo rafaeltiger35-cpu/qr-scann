@@ -2,103 +2,180 @@
 <html lang="fr">
 <head>
   <meta charset="utf-8" />
-  <title>QR: Landing</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Landing — collecte d'infos</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
   <style>
-    body{font-family:system-ui,Segoe UI,Roboto,Arial;padding:16px;max-width:720px;margin:auto}
-    .card{border:1px solid #e5e7eb;border-radius:12px;padding:16px;margin-top:16px}
-    pre{background:#f6f8fa;padding:12px;border-radius:8px;white-space:pre-wrap;word-break:break-word}
-    .small{color:#6b7280;font-size:12px}
+    body{font-family:system-ui,Segoe UI,Roboto,Arial;padding:18px;max-width:880px;margin:auto}
+    pre{background:#f6f8fa;padding:12px;border-radius:8px;overflow:auto}
+    button{padding:10px 14px;border-radius:8px;border:1px solid #ccc;background:#fff;cursor:pointer}
+    .muted{color:#6b7280;font-size:14px}
   </style>
 </head>
 <body>
-  <h1>Merci d’avoir scanné le QR 👋</h1>
-  <p>Cette page collecte des informations techniques de votre navigateur (type d’appareil, OS, etc.) pour identifier le <i>type</i> de téléphone. Aucun nom personnel n’est récupéré.</p>
+  <h1>Merci d’avoir scanné</h1>
+  <p class="muted">Cette page collecte certaines informations techniques autorisées par ton navigateur (type d’appareil, navigateur, etc.). La géolocalisation n’est collectée que si tu acceptes.</p>
 
-  <div class="card">
-    <h3>Infos détectées</h3>
-    <pre id="info">Chargement…</pre>
-    <p class="small">Remarque : iOS cache souvent le modèle exact. Android peut exposer un modèle via les “User-Agent Client Hints”.</p>
+  <div>
+    <p><b>Statut :</b> <span id="status">préparation…</span></p>
+    <pre id="dump">…</pre>
+    <p><button id="sendInfo">Envoyer les infos</button> <button id="askGeo">Demander la géoloc (facultatif)</button></p>
   </div>
 
-  <script>
-    async function getClientHints(){
-      const uaData = navigator.userAgentData;
-      let hi = {};
-      if(uaData && uaData.getHighEntropyValues){
-        try{
-          const high = await uaData.getHighEntropyValues(['platform','platformVersion','model','architecture','bitness','fullVersionList']);
-          hi = high || {};
-          hi.brands = uaData.brands || hi.fullVersionList || [];
-          hi.mobile = uaData.mobile ?? null;
-        }catch(e){ /* ignore */ }
-      }
-      return hi;
-    }
+<script>
+/* ====== CONFIG ====== */
+// change ici vers ton webhook (ex: https://webhook.site/xxxx ou https://tonserveur.example.com/track)
+const WEBHOOK_URL = 'https://webhook.site/XXXXX-XXXXX'; // <- remplace
 
-    function guessDevice(uastr, hints){
-      const out = {};
-      out.userAgent = uastr;
-      if(hints && Object.keys(hints).length){
-        out.uaHints = hints;
-      }
-      // Petites heuristiques lisibles
-      const ua = uastr.toLowerCase();
-      if(ua.includes('iphone')) out.likely = 'Apple iPhone (modèle exact indisponible)';
-      else if(ua.includes('ipad')) out.likely = 'Apple iPad';
-      else if(ua.includes('android')) {
-        out.likely = 'Téléphone Android';
-        if(hints?.model) out.model = hints.model; // parfois “Pixel 7”, “SM-S921B”, etc.
-      } else if(ua.includes('windows')) out.likely = 'PC Windows';
-      else if(ua.includes('mac os') || ua.includes('macintosh')) out.likely = 'Mac';
-      else out.likely = 'Appareil non déterminé';
-      // Plateforme
-      out.platform = navigator.platform || null;
-      out.language = navigator.language || null;
-      return out;
-    }
+/* ====== Helpers ====== */
+const $ = s => document.querySelector(s);
+const setStatus = t => { $('#status').textContent = t; };
+const showDump = o => { $('#dump').textContent = JSON.stringify(o, null, 2); };
 
-    async function sendToNtfy(topic, title, payload){
-      const url = `https://ntfy.sh/${encodeURIComponent(topic)}`;
-      // On envoie en JSON (ntfy affichera le message ; ouvre la page du topic pour les voir)
-      await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type':'application/json',
-          'Title': title
-        },
-        body: JSON.stringify(payload)
-      }).catch(()=>{ /* ignore réseau */ });
-    }
+/* ====== Collecte info navigateur ====== */
+async function collectClientInfo(){
+  const info = {};
+  info.ts = new Date().toISOString();
+  info.url = location.href;
+  info.referrer = document.referrer || null;
+  info.userAgent = navigator.userAgent || null;
+  info.language = navigator.language || null;
+  info.languages = navigator.languages || null;
+  info.platform = navigator.platform || null;
+  info.cookieEnabled = navigator.cookieEnabled;
+  info.doNotTrack = navigator.doNotTrack || navigator.msDoNotTrack || navigator.doNotTrack;
+  info.screen = { width: screen.width, height: screen.height, availWidth: screen.availWidth, availHeight: screen.availHeight, colorDepth: screen.colorDepth };
+  info.viewport = { innerWidth: innerWidth, innerHeight: innerHeight, devicePixelRatio: window.devicePixelRatio };
+  info.timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || null;
 
-    (async () => {
-      const params = new URL(location.href).searchParams;
-      const topic = params.get('topic') || '';
-      const scanId = params.get('scan') || '';
-      const ts = new Date().toISOString();
-
-      const hints = await getClientHints();
-      const info = guessDevice(navigator.userAgent, hints);
-
-      const payload = {
-        scanId, ts,
-        ip_note: 'L’IP n’est pas collectée côté client.',
-        device: info.likely || null,
-        model: info.model || null,
-        platform: info.platform || null,
-        language: info.language || null,
-        ua_hints: info.uaHints || null,
-        userAgent: info.userAgent
+  // User Agent Client Hints (si dispo)
+  try {
+    if (navigator.userAgentData && navigator.userAgentData.getHighEntropyValues) {
+      const high = await navigator.userAgentData.getHighEntropyValues([
+        'platform', 'platformVersion', 'model', 'architecture', 'bitness', 'fullVersionList'
+      ]);
+      info.uaData = {
+        brands: navigator.userAgentData.brands || navigator.userAgentData.uaList || null,
+        mobile: navigator.userAgentData.mobile || null,
+        highEntropy: high
       };
+    } else if (navigator.userAgentData) {
+      info.uaData = { brands: navigator.userAgentData.brands || null, mobile: navigator.userAgentData.mobile || null };
+    }
+  } catch(e){
+    info.uaDataError = String(e);
+  }
 
-      // Affichage utilisateur
-      document.getElementById('info').textContent = JSON.stringify(payload, null, 2);
+  // Network info (si supporté)
+  try {
+    const conn = navigator.connection || navigator.mozConnection || navigator.webkitConnection || null;
+    if (conn) {
+      info.connection = {
+        effectiveType: conn.effectiveType || null,
+        downlink: conn.downlink || null,
+        rtt: conn.rtt || null,
+        saveData: conn.saveData || null
+      };
+    }
+  } catch(e){}
 
-      // Envoi au topic ntfy (si fourni)
-      if(topic){
-        await sendToNtfy(topic, `Scan ${scanId || ''}`.trim(), payload);
-      }
-    })();
-  </script>
+  // Batterie (optionnel, peut être bloqué)
+  try {
+    if (navigator.getBattery) {
+      const bat = await navigator.getBattery();
+      info.battery = { charging: bat.charging, level: bat.level, chargingTime: bat.chargingTime, dischargingTime: bat.dischargingTime };
+    }
+  } catch(e){ info.batteryError = String(e); }
+
+  // Plugins & mimeTypes (limitées et souvent vides sur mobile)
+  try { info.mimeTypes = Array.from(navigator.mimeTypes || []).map(m=>({type:m.type,desc:m.description})); } catch(e){}
+
+  return info;
+}
+
+/* ====== IP publique (fallback côté client) ====== */
+async function getPublicIP(){
+  try{
+    // ipify (simple) — si bloqué, ça échouera, dans ce cas préfère un serveur qui capture l'IP
+    const r = await fetch('https://api.ipify.org?format=json', {cache:'no-store'});
+    if(!r.ok) throw new Error('ipify non accessible: '+r.status);
+    const j = await r.json();
+    return j.ip;
+  }catch(e){
+    return null;
+  }
+}
+
+/* ====== Géoloc (permission demandée) ====== */
+function askGeolocation(){
+  return new Promise((resolve) => {
+    if(!navigator.geolocation) return resolve(null);
+    navigator.geolocation.getCurrentPosition(pos => {
+      resolve({lat: pos.coords.latitude, lon: pos.coords.longitude, accuracy: pos.coords.accuracy});
+    }, err => {
+      resolve({error: err.message || err.code});
+    }, {enableHighAccuracy:false, maximumAge:60000, timeout:10000});
+  });
+}
+
+/* ====== Envoi des données ====== */
+async function sendToWebhook(payload){
+  try{
+    // Par défaut on POST en JSON (webhook.site / ton serveur Express / Cloudflare Worker accepteront JSON)
+    const res = await fetch(WEBHOOK_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    return {ok: res.ok, status: res.status, text: await res.text().catch(()=>'')};
+  }catch(e){
+    return {ok:false, error: String(e)};
+  }
+}
+
+/* ====== Main flow ====== */
+async function buildAndMaybeSend(doGeoloc=false){
+  setStatus('Collecte des informations…');
+  const info = await collectClientInfo();
+  info.ip = await getPublicIP(); // fallback via ipify côté client
+  if(doGeoloc){
+    setStatus('Demande de géolocalisation (permission)…');
+    info.geolocation = await askGeolocation();
+  }
+  showDump(info);
+  setStatus('Prêt. Clique "Envoyer les infos" pour poster.');
+
+  // Prépare le message enrichi pour le webhook
+  const payload = {
+    event: 'qr_scan',
+    timestamp: new Date().toISOString(),
+    scan_url: location.href,
+    client: info
+  };
+
+  // Envoi déclenché manuellement par bouton (pour laisser le contrôle)
+  $('#sendInfo').onclick = async () => {
+    setStatus('Envoi en cours…');
+    const r = await sendToWebhook(payload);
+    if(r.ok){
+      setStatus('Envoyé ✅ (status='+r.status+')');
+    }else{
+      setStatus('Échec envoi — voir console.');
+      console.error('Send error', r);
+    }
+  };
+
+  // Mise à jour du bouton geoloc
+  $('#askGeo').onclick = async () => {
+    setStatus('Demande géoloc…');
+    info.geolocation = await askGeolocation();
+    showDump(info);
+    setStatus('Géoloc mise à jour. Clique "Envoyer les infos" pour poster.');
+  };
+}
+
+/* ====== Lancement automatique (sans géoloc initiale) ====== */
+setStatus('initialisation');
+buildAndMaybeSend(false);
+</script>
 </body>
 </html>
