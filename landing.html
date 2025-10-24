@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <title>QR: Landing</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body{font-family:system-ui,Segoe UI,Roboto,Arial;padding:16px;max-width:720px;margin:auto}
+    .card{border:1px solid #e5e7eb;border-radius:12px;padding:16px;margin-top:16px}
+    pre{background:#f6f8fa;padding:12px;border-radius:8px;white-space:pre-wrap;word-break:break-word}
+    .small{color:#6b7280;font-size:12px}
+  </style>
+</head>
+<body>
+  <h1>Merci d’avoir scanné le QR 👋</h1>
+  <p>Cette page collecte des informations techniques de votre navigateur (type d’appareil, OS, etc.) pour identifier le <i>type</i> de téléphone. Aucun nom personnel n’est récupéré.</p>
+
+  <div class="card">
+    <h3>Infos détectées</h3>
+    <pre id="info">Chargement…</pre>
+    <p class="small">Remarque : iOS cache souvent le modèle exact. Android peut exposer un modèle via les “User-Agent Client Hints”.</p>
+  </div>
+
+  <script>
+    async function getClientHints(){
+      const uaData = navigator.userAgentData;
+      let hi = {};
+      if(uaData && uaData.getHighEntropyValues){
+        try{
+          const high = await uaData.getHighEntropyValues(['platform','platformVersion','model','architecture','bitness','fullVersionList']);
+          hi = high || {};
+          hi.brands = uaData.brands || hi.fullVersionList || [];
+          hi.mobile = uaData.mobile ?? null;
+        }catch(e){ /* ignore */ }
+      }
+      return hi;
+    }
+
+    function guessDevice(uastr, hints){
+      const out = {};
+      out.userAgent = uastr;
+      if(hints && Object.keys(hints).length){
+        out.uaHints = hints;
+      }
+      // Petites heuristiques lisibles
+      const ua = uastr.toLowerCase();
+      if(ua.includes('iphone')) out.likely = 'Apple iPhone (modèle exact indisponible)';
+      else if(ua.includes('ipad')) out.likely = 'Apple iPad';
+      else if(ua.includes('android')) {
+        out.likely = 'Téléphone Android';
+        if(hints?.model) out.model = hints.model; // parfois “Pixel 7”, “SM-S921B”, etc.
+      } else if(ua.includes('windows')) out.likely = 'PC Windows';
+      else if(ua.includes('mac os') || ua.includes('macintosh')) out.likely = 'Mac';
+      else out.likely = 'Appareil non déterminé';
+      // Plateforme
+      out.platform = navigator.platform || null;
+      out.language = navigator.language || null;
+      return out;
+    }
+
+    async function sendToNtfy(topic, title, payload){
+      const url = `https://ntfy.sh/${encodeURIComponent(topic)}`;
+      // On envoie en JSON (ntfy affichera le message ; ouvre la page du topic pour les voir)
+      await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type':'application/json',
+          'Title': title
+        },
+        body: JSON.stringify(payload)
+      }).catch(()=>{ /* ignore réseau */ });
+    }
+
+    (async () => {
+      const params = new URL(location.href).searchParams;
+      const topic = params.get('topic') || '';
+      const scanId = params.get('scan') || '';
+      const ts = new Date().toISOString();
+
+      const hints = await getClientHints();
+      const info = guessDevice(navigator.userAgent, hints);
+
+      const payload = {
+        scanId, ts,
+        ip_note: 'L’IP n’est pas collectée côté client.',
+        device: info.likely || null,
+        model: info.model || null,
+        platform: info.platform || null,
+        language: info.language || null,
+        ua_hints: info.uaHints || null,
+        userAgent: info.userAgent
+      };
+
+      // Affichage utilisateur
+      document.getElementById('info').textContent = JSON.stringify(payload, null, 2);
+
+      // Envoi au topic ntfy (si fourni)
+      if(topic){
+        await sendToNtfy(topic, `Scan ${scanId || ''}`.trim(), payload);
+      }
+    })();
+  </script>
+</body>
+</html>

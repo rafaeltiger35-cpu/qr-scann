@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <title>QR: Générateur</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <!-- Mini lib QR depuis un CDN (léger) -->
+  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+  <style>
+    body{font-family:system-ui,Segoe UI,Roboto,Arial;padding:16px;max-width:720px;margin:auto}
+    label{display:block;margin:12px 0 4px}
+    input,button{font-size:16px;padding:10px;border:1px solid #ccc;border-radius:8px;width:100%}
+    button{cursor:pointer}
+    .row{display:grid;grid-template-columns:1fr;gap:12px}
+    .card{border:1px solid #e5e7eb;border-radius:12px;padding:16px;margin-top:16px}
+    canvas,img{max-width:100%;height:auto;margin-top:12px}
+    code{background:#f6f8fa;padding:2px 6px;border-radius:6px}
+  </style>
+</head>
+<body>
+  <h1>Générer un QR pour traquer les scans (sans serveur)</h1>
+  <p>
+    1) Choisis un <b>topic</b> ntfy (une chaîne unique),<br>
+    2) donne l’URL de ta page d’atterrissage <code>landing.html</code>,<br>
+    3) clique “Générer”.
+  </p>
+
+  <div class="row">
+    <div class="card">
+      <label>Topic ntfy (ex: <code>mon-evenement-2025</code>)</label>
+      <input id="topic" placeholder="mon-topic-unique" />
+
+      <label>URL de landing (hébergée) – ex: <code>https://ton-domaine.com/landing.html</code></label>
+      <input id="landingUrl" placeholder="https://exemple.com/landing.html" />
+
+      <button id="gen">Générer le QR</button>
+
+      <div id="result" style="display:none">
+        <p><b>URL encodée dans le QR :</b> <a id="finalUrl" target="_blank" rel="noopener"></a></p>
+        <canvas id="qrcanvas"></canvas>
+        <p style="font-size:14px;color:#555">Astuce : ouvre <a id="ntfyView" target="_blank" rel="noopener">la page de ton topic ntfy</a> pour voir les scans apparaître en direct.</p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function randId(len=8){
+      const chars = 'abcdef0123456789';
+      let out=''; for(let i=0;i<len;i++) out+=chars[Math.floor(Math.random()*chars.length)];
+      return out;
+    }
+
+    document.getElementById('gen').addEventListener('click', async () => {
+      const topic = (document.getElementById('topic').value || '').trim();
+      const landing = (document.getElementById('landingUrl').value || '').trim();
+      if(!topic || !landing){
+        alert('Remplis le topic ntfy et l’URL de landing.html');
+        return;
+      }
+      const id = randId(10);
+      const url = new URL(landing);
+      url.searchParams.set('topic', topic);
+      url.searchParams.set('scan', id);
+
+      const final = url.toString();
+      const a = document.getElementById('finalUrl');
+      a.textContent = final;
+      a.href = final;
+
+      // Générer le QR
+      const canvas = document.getElementById('qrcanvas');
+      await QRCode.toCanvas(canvas, final, { width: 320, margin: 1 });
+
+      // Lien pour consulter les notifications
+      const v = document.getElementById('ntfyView');
+      v.href = `https://ntfy.sh/${encodeURIComponent(topic)}`;
+
+      document.getElementById('result').style.display = 'block';
+    });
+  </script>
+</body>
+</html>
