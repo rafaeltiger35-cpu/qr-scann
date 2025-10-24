@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
   <meta charset="utf-8" />
-  <title>QR: Générateur (local)</title>
+  <title>QR: Générateur (fiable)</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
     body{font-family:system-ui,Segoe UI,Roboto,Arial;padding:16px;max-width:720px;margin:auto}
@@ -10,7 +10,7 @@
     input,button{font-size:16px;padding:10px;border:1px solid #ccc;border-radius:8px;width:100%}
     button{cursor:pointer}
     .card{border:1px solid #e5e7eb;border-radius:12px;padding:16px;margin-top:16px}
-    canvas{max-width:100%;height:auto;margin-top:12px}
+    img{max-width:100%;height:auto;margin-top:12px}
     .error{color:#b91c1c;background:#fee2e2;border:1px solid #fecaca;padding:8px;border-radius:8px;display:none}
     .hint{font-size:14px;color:#555}
   </style>
@@ -31,38 +31,10 @@
 
     <div id="result" style="display:none">
       <p><b>URL encodée :</b> <a id="finalUrl" target="_blank" rel="noopener"></a></p>
-      <canvas id="qrcanvas"></canvas>
+      <img id="qrimg" alt="QR code">
       <p class="hint">Ouvre <a id="ntfyView" target="_blank" rel="noopener">la page de ton topic ntfy</a> pour voir les scans.</p>
     </div>
   </div>
-
-  <!-- Librairie QRCode.js intégrée directement -->
-  <script>
-  /*! qrcode.js 2024 intégré (simplifié) */
-  class QR8bit {
-    constructor(data){this.mode="Byte";this.data=data}
-    write(buffer){for(let i=0;i<this.data.length;i++)buffer.push(this.data.charCodeAt(i))}
-  }
-  class QR {
-    constructor(data){this.data=data}
-    draw(canvas){
-      const ctx=canvas.getContext('2d');
-      const size=300;
-      canvas.width=size;canvas.height=size;
-      ctx.fillStyle="#fff";ctx.fillRect(0,0,size,size);
-      // petit QR "simplifié" (hash binaire)
-      const hash=Array.from(this.data).reduce((a,c)=>a+c.charCodeAt(0),0);
-      const n=29, s=size/n;
-      for(let y=0;y<n;y++){
-        for(let x=0;x<n;x++){
-          const v=(Math.sin((x*y+hash)%37)+1)/2>0.5;
-          ctx.fillStyle=v?"#000":"#fff";
-          ctx.fillRect(x*s,y*s,s,s);
-        }
-      }
-    }
-  }
-  </script>
 
   <script>
     const $ = s => document.querySelector(s);
@@ -74,6 +46,7 @@
       return out;
     }
 
+    // Préremplir automatiquement la landing si déployé sur GitHub Pages
     (function autoFill(){
       const base = location.origin + location.pathname.replace(/\/[^/]*$/,'/');
       $('#landingUrl').value = base + 'landing.html';
@@ -83,22 +56,26 @@
       $('#err').style.display='none';
       const topic = ($('#topic').value || '').trim();
       const landing = ($('#landingUrl').value || '').trim();
-      if(!topic) return err('Renseigne un "Topic ntfy".');
-      if(!landing.startsWith('http')) return err('Mets une URL valide (ex: https://.../landing.html).');
+      if(!topic) return err('Renseigne un "Topic ntfy" (ex: qr-scann-test-1).');
+      if(!/^https?:\/\/.+\/.+\.html$/i.test(landing)) return err('Mets une URL de landing VALIDE (ex: https://.../landing.html).');
 
       const id = randId(10);
-      const url = new URL(landing);
-      url.searchParams.set('topic', topic);
-      url.searchParams.set('scan', id);
-      const final = url.toString();
+      const u = new URL(landing);
+      u.searchParams.set('topic', topic);
+      u.searchParams.set('scan', id);
+      const final = u.toString();
 
-      $('#finalUrl').textContent = final;
-      $('#finalUrl').href = final;
+      // Lien cliquable
+      const a = $('#finalUrl'); a.textContent = final; a.href = final;
 
-      const qr = new QR(final);
-      qr.draw($('#qrcanvas'));
+      // QR standard via Google Chart (image PNG)
+      const img = $('#qrimg');
+      const size = 512; // augmenter si besoin
+      img.src = `https://chart.googleapis.com/chart?cht=qr&chs=${size}x${size}&chld=L|0&choe=UTF-8&chl=${encodeURIComponent(final)}`;
 
+      // Lien vers le topic ntfy
       $('#ntfyView').href = `https://ntfy.sh/${encodeURIComponent(topic)}`;
+
       $('#result').style.display='block';
     });
   </script>
