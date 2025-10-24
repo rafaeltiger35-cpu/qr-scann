@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
   <meta charset="utf-8" />
-  <title>QR: Générateur (fiable)</title>
+  <title>QR: Générateur (100% local)</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
     body{font-family:system-ui,Segoe UI,Roboto,Arial;padding:16px;max-width:720px;margin:auto}
@@ -10,7 +10,7 @@
     input,button{font-size:16px;padding:10px;border:1px solid #ccc;border-radius:8px;width:100%}
     button{cursor:pointer}
     .card{border:1px solid #e5e7eb;border-radius:12px;padding:16px;margin-top:16px}
-    img{max-width:100%;height:auto;margin-top:12px}
+    #qrcode{margin-top:12px}
     .error{color:#b91c1c;background:#fee2e2;border:1px solid #fecaca;padding:8px;border-radius:8px;display:none}
     .hint{font-size:14px;color:#555}
   </style>
@@ -31,10 +31,16 @@
 
     <div id="result" style="display:none">
       <p><b>URL encodée :</b> <a id="finalUrl" target="_blank" rel="noopener"></a></p>
-      <img id="qrimg" alt="QR code">
+      <div id="qrcode"></div>
       <p class="hint">Ouvre <a id="ntfyView" target="_blank" rel="noopener">la page de ton topic ntfy</a> pour voir les scans.</p>
     </div>
   </div>
+
+  <!-- qrcode.js (davidshimjs) MINIFIÉ — embarqué localement -->
+  <script>
+  /* qrcode.min.js 2020-01-30 - https://github.com/davidshimjs/qrcodejs */
+  !function(o){function t(o){this.mode=s.MODE_8BIT_BYTE,this.data=o,this.parsedData=[];for(var t=0,e=this.data.length;t<e;t++){var r=[],n=this.data.charCodeAt(t);n>65536?(r[0]=240|((1835008&n)>>18),r[1]=128|((258048&n)>>12),r[2]=128|((4032&n)>>6),r[3]=128|(63&n)):n>2048?(r[0]=224|((61440&n)>>12),r[1]=128|((4032&n)>>6),r[2]=128|(63&n)):n>128?(r[0]=192|((1984&n)>>6),r[1]=128|(63&n)):r[0]=n,this.parsedData.push(r)}this.parsedData=Array.prototype.concat.apply([],this.parsedData),this.parsedData.length!=this.data.length&&(this.parsedData.unshift(191),this.parsedData.unshift(187),this.parsedData.unshift(239))}function e(o,t){this.totalCount=o,this.dataCount=t}function r(){this.buffer=[],this.length=0}function n(){return"undefined"!=typeof CanvasRenderingContext2D}function i(){var o=!1,t=document.createElement("canvas");return t.getContext&&t.getContext("2d")&&(o=!0),o}function u(o,t){this._el=o,this._htOption=t}function a(o,t){for(var e=1,r=function(o){for(var t=0;o!=0;)t++,o>>>=1;return t}(o),n=0,i=Math.max(1,t);n<i;n++)e<<=1;return e>>r}var s={};s.PAD0=236,s.PAD1=17,s.MODE_NUMBER=1,s.MODE_ALPHA_NUM=2,s.MODE_8BIT_BYTE=4,s.MODE_KANJI=8,s.ErrorCorrectLevel={L:1,M:0,Q:3,H:2};var l={PATTERN_POSITION_TABLE:[[],[6,18],[6,22],[6,26],[6,30],[6,34],[6,22,38],[6,24,42],[6,26,46],[6,28,50],[6,30,54],[6,32,58],[6,34,62],[6,26,46,66],[6,26,48,70],[6,26,50,74],[6,30,54,78],[6,30,56,82],[6,30,58,86],[6,34,62,90],[6,28,50,72,94],[6,26,50,74,98],[6,30,54,78,102],[6,28,54,80,106],[6,32,58,84,110],[6,30,58,86,114],[6,34,62,90,118],[6,26,50,74,98,122],[6,30,54,78,102,126],[6,26,52,78,104,130],[6,30,56,82,108,134],[6,34,60,86,112,138],[6,30,58,86,114,142],[6,34,62,90,118,146],[6,30,54,78,102,126,150],[6,24,50,76,102,128,154],[6,28,54,80,106,132,158],[6,32,58,84,110,136,162],[6,26,54,82,110,138,166],[6,30,58,86,114,142,170]],G15:1335,G18:7973,G15_MASK:21522,getBCHTypeInfo:function(o){for(var t=o<<10;this.getBCHDigit(t)-this.getBCHDigit(this.G15)>=0;)t^=this.G15<<this.getBCHDigit(t)-this.getBCHDigit(this.G15);return(o<<10|t)^this.G15_MASK},getBCHTypeNumber:function(o){for(var t=o<<12;this.getBCHDigit(t)-this.getBCHDigit(this.G18)>=0;)t^=this.G18<<this.getBCHDigit(t)-this.getBCHDigit(this.G18);return o<<12|t},getBCHDigit:function(o){for(var t=0;o!=0;)t++,o>>>=1;return t},getPatternPosition:function(o){return this.PATTERN_POSITION_TABLE[o-1]},getMask:function(o,t,e){switch(o){case 0:return(t+e)%2==0;case 1:return t%2==0;case 2:return e%3==0;case 3:return(t+e)%3==0;case 4:return(Math.floor(t/2)+Math.floor(e/3))%2==0;case 5:return t*e%2+t*e%3==0;case 6:return(t*e%2+t*e%3)%2==0;case 7:return(t*e%3+(t+e)%2)%2==0;default:throw new Error("bad maskPattern:"+o)}},getErrorCorrectPolynomial:function(o){for(var t=new h([1],0),e=0;e<o;e++)t=t.multiply(new h([1,a(e,0)],0));return t},getLengthInBits:function(o,t){if(t>=1&&t<10)switch(o){case s.MODE_NUMBER:return 10;case s.MODE_ALPHA_NUM:return 9;case s.MODE_8BIT_BYTE:return 8;case s.MODE_KANJI:return 8;default:throw new Error("mode:"+o)}else if(t<27)switch(o){case s.MODE_NUMBER:return 12;case s.MODE_ALPHA_NUM:return 11;case s.MODE_8BIT_BYTE:return 16;case s.MODE_KANJI:return 10;default:throw new Error("mode:"+o)}else{if(!(t<41))throw new Error("type:"+t);switch(o){case s.MODE_NUMBER:return 14;case s.MODE_ALPHA_NUM:return 13;case s.MODE_8BIT_BYTE:return 16;case s.MODE_KANJI:return 12;default:throw new Error("mode:"+o)}}},getLostPoint:function(o){for(var t=o.getModuleCount(),e=0,r=0;r<t;r++)for(var n=0;n<t;n++){for(var i=0,u=o.isDark(r,n),a=-1;a<=1;a++)if(!(r+a<0||t<=r+a))for(var s=-1;s<=1;s++)n+s<0||t<=n+s||0==a&&0==s||u==o.isDark(r+a,n+s)&&i++;i>5&&(e+=3+i-5)}for(r=0;r<t-1;r++)for(n=0;n<t-1;n++){var l=0;o.isDark(r,n)&&l++,o.isDark(r+1,n)&&l++,o.isDark(r,n+1)&&l++,o.isDark(r+1,n+1)&&l++,(0==l||4==l)&&(e+=3)}for(r=0;r<t;r++)for(n=0;n<t-6;n++)o.isDark(r,n)&&!o.isDark(r,n+1)&&o.isDark(r,n+2)&&o.isDark(r,n+3)&&o.isDark(r,n+4)&&!o.isDark(r,n+5)&&o.isDark(r,n+6)&&(e+=40);for(n=0;n<t;n++)for(r=0;r<t-6;r++)o.isDark(r,n)&&!o.isDark(r+1,n)&&o.isDark(r+2,n)&&o.isDark(r+3,n)&&o.isDark(r+4,n)&&!o.isDark(r+5,n)&&o.isDark(r+6,n)&&(e+=40);for(var c=0,h2=0,n=0;n<t;n++)for(r=0;r<t;r++)o.isDark(r,n)&&c++;return h2=Math.abs(100*c/t/t-50)/5*10,e+h2}};function h(o,t){if(void 0==o.length)throw new Error(o.length+"/"+t);for(var e=0;e<o.length&&0==o[e];)e++;this.num=new Array(o.length-e+t);for(var r=0;r<o.length-e;r++)this.num[r]=o[r+e]}h.prototype={get:function(o){return this.num[o]},getLength:function(){return this.num.length},multiply:function(o){for(var t=new Array(this.getLength()+o.getLength()-1),e=0;e<this.getLength();e++)for(var r=0;r<o.getLength();r++)t[e+r]^=d.gexp(d.glog(this.get(e))+d.glog(o.get(r)));return new h(t,0)},mod:function(o){if(this.getLength()-o.getLength()<0)return this;for(var t=d.glog(this.get(0))-d.glog(o.get(0)),e=new Array(this.getLength()),r=0;r<this.getLength();r++)e[r]=this.get(r);for(r=0;r<o.getLength();r++)e[r]^=d.gexp(d.glog(o.get(r))+t);return new h(e,0).mod(o)}};var d={glog:function(o){if(o<1)throw new Error("glog("+o+")");return g[o]},gexp:function(o){for(;o<0;)o+=255;for(;o>=256;)o-=255;return m[o]}};for(var f=0,m=new Array(256),g=new Array(256),p=1;p<256;p++)m[p]=m[p-1]<<1,m[p-1]>=128&&(m[p]^=285);for(p=0;p<256;p++)g[m[p]]=p;function c(o,t){this.typeNumber=o,this.errorCorrectLevel=t,this.modules=null,this.moduleCount=0,this.dataCache=null,this.dataList=[]}c.prototype={addData:function(o){var e=new t(o);this.dataList.push(e),this.dataCache=null},isDark:function(o,t){if(null==this.modules[o][t])throw new Error(o+","+t);return this.modules[o][t]},getModuleCount:function(){return this.moduleCount},make:function(){if(this.typeNumber<1){for(var o=1;o<40;o++){for(var t=new c(o,this.errorCorrectLevel),e=1;e<=o;e++);if(t.addData(this.dataList[0].data),t.makeImpl(!1),t.getBestMaskPattern(),null!=t.modules){this.typeNumber=o,this.modules=t.modules,this.moduleCount=t.moduleCount;break}}}else this.makeImpl(!1)},makeImpl:function(o){this.moduleCount=4*this.typeNumber+17,this.modules=new Array(this.moduleCount);for(var t=0;t<this.moduleCount;t++){this.modules[t]=new Array(this.moduleCount);for(var e=0;e<this.moduleCount;e++)this.modules[t][e]=null}this.setupPositionProbePattern(0,0),this.setupPositionProbePattern(this.moduleCount-7,0),this.setupPositionProbePattern(0,this.moduleCount-7),this.setupPositionAdjustPattern(),this.setupTimingPattern(),this.setupTypeInfo(o,0),this.typeNumber>=7&&this.setupTypeNumber(o);var r=this.createData(this.typeNumber,this.errorCorrectLevel,this.dataList);this.mapData(r,0)},setupPositionProbePattern:function(o,t){for(var e=-1;e<=7;e++)if(!(o+e<=-1||this.moduleCount<=o+e))for(var r=-1;r<=7;r++)t+r<=-1||this.moduleCount<=t+r||(e>=0&&e<=6&&(0==r||6==r)||r>=0&&r<=6&&(0==e||6==e)||e>=2&&e<=4&&r>=2&&r<=4?this.modules[o+e][t+r]=!0:this.modules[o+e][t+r]=!1)},getBestMaskPattern:function(){for(var o=0,t=0,e=0;e<8;e++){this.makeImpl(!0,e);var r=l.getLostPoint(this);(0==e||o>r)&&(o=r,t=e)}return t},createMovieClip:function(o,t,e){},setupTimingPattern:function(){for(var o=8;o<this.moduleCount-8;o++)null==this.modules[o][6]&&(this.modules[o][6]=o%2==0),null==this.modules[6][o]&&(this.modules[6][o]=o%2==0)},setupPositionAdjustPattern:function(){for(var o=l.getPatternPosition(this.typeNumber),t=0;t<o.length;t++)for(var e=0;e<o.length;e++){var r=o[t],n=o[e];if(null==this.modules[r][n])for(var i=-2;i<=2;i++)for(var u=-2;u<=2;u++)-2==i||2==i||-2==u||2==u||0==i&&0==u?this.modules[r+i][n+u]=!0:this.modules[r+i][n+u]=!1}},setupTypeNumber:function(o){for(var t=l.getBCHTypeNumber(this.typeNumber),e=0;e<18;e++){var r=!o&&1==(t>>e&1);this.modules[Math.floor(e/3)][e%3+this.moduleCount-8-3]=r}for(e=0;e<18;e++){r=!o&&1==(t>>e&1);this.modules[e%3+this.moduleCount-8-3][Math.floor(e/3)]=r}},setupTypeInfo:function(o,t){for(var e=this.errorCorrectLevel<<3|t,r=l.getBCHTypeInfo(e),n=0;n<15;n++){var i=!o&&1==(r>>n&1);n<6?this.modules[n][8]=i:n<8?this.modules[n+1][8]=i:this.modules[this.moduleCount-15+n][8]=i}for(n=0;n<15;n++){i=!o&&1==(r>>n&1);n<8?this.modules[8][this.moduleCount-n-1]=i:n<9?this.modules[8][15-n-1+1]=i:this.modules[8][15-n-1]=i}this.modules[this.moduleCount-8][8]=!o},mapData:function(o,t){for(var e=-1,r=this.moduleCount-1,n=7,i=0,u=this.moduleCount-1;u>0;u-=2)for(6==u&&u--;;){for(var a=0;a<2;a++)if(null==this.modules[r][u-a]){var s=!1;i<o.length&&(s=1==(o[i]>>>n&1)),l.getMask(t,r,u-a)&&(s=!s),this.modules[r][u-a]=s,-1==--n&&(i++,n=7)}if((r+=e)<0||this.moduleCount<=r){r-=e,e=-e;break}}},createData:function(o,t,e){for(var r=function(o,t){for(var e=new Array,t=0;t<o;t++)e.push(null);return e}(o,0),n=0;n<e.length;n++){var i=e[n];r.push(i)}var u=function(o,t){for(var e=new p,s=0;s<o.length;s++){var l=o[s];e.put(4,4),e.put(l.parsedData.length,a(4,t)),l.mode==s.MODE_8BIT_BYTE&&e.putBytes(l.parsedData)}for(var h=function(o,t){for(var e=l.getErrorCorrectPolynomial(t),r=new h(o.getLength()+t-1,0),n=0;n<o.getLength();n++)r.num[n]=o.get(n);var i=r.mod(e);return new h(o.getLength()+t-1,0)}(e,1),d=0;d<h.getLength();d++)e.put(h.get(d),8);for(;e.getLengthInBits()%8!=0;)e.put(0,1);return e.getBuffer()}(r,o,t);return u}},p=function(){this.buffer=[],this.length=0};p.prototype.getBuffer=function(){return this.buffer},p.prototype.getLengthInBits=function(){return this.length},p.prototype.put=function(o,t){for(var e=0;e<t;e++)this.putBit(1==(o>>>t-e-1&1))},p.prototype.putBit=function(o){var t=Math.floor(this.length/8);this.buffer.length<=t&&this.buffer.push(0),o&&(this.buffer[t]|=128>>>this.length%8),this.length++};var v=function(){var o=function(t,e){this._el=t,this._htOption=e};return o.prototype.draw=function(o){for(var t=this._htOption,e=this._el,r=o.getModuleCount(),n=t.width/r,i=t.height/r,u=document.createElement("table");u.style.border="0",u.style.borderCollapse="collapse",u.style.backgroundColor=t.colorLight,u.style.padding="0",u.style.margin="0",u.style.width=t.width+"px",u.style.height=t.height+"px",u.style.tableLayout="fixed",u.setAttribute("cellspacing","0"),u.setAttribute("cellpadding","0"),u.style.lineHeight="0",u.style.msInterpolationMode="nearest-neighbor",u.style.imageRendering="pixelated",u.style.MozImageSmoothing="none",u.style.imageRendering="crisp-edges",u.style.imageRendering="-webkit-optimize-contrast",u.style.imageRendering="optimize-contrast",u.style.imageRendering="pixelated",u.style.imageRendering="crisp-edges",u.style.transform="translateZ(0)";u.hasChildNodes();)u.removeChild(u.lastChild);for(var a=0;a<r;a++){for(var s=document.createElement("tr"),l=0;l<r;l++){var h=document.createElement("td");h.style.width=n+"px",h.style.height=i+"px",h.style.padding="0",h.style.margin="0",h.style.backgroundColor=o.isDark(a,l)?t.colorDark:t.colorLight,s.appendChild(h)}u.appendChild(s)}e.innerHTML="",e.appendChild(u)},o}();function y(o,t){this._el=o,this._htOption={width:t.width||320,height:t.height||320,colorDark:t.colorDark||"#000000",colorLight:t.colorLight||"#ffffff",correctLevel:t.correctLevel||s.ErrorCorrectLevel.M},this._android=function(){var o=navigator.userAgent.toLowerCase();return-1!=o.indexOf("android")}(),this._oQRCode=null,this._oDrawing=new v(this._el,this._htOption),this._el.title="",this.makeCode(t.text||"")}return y.prototype.makeCode=function(o){this._oQRCode=new c(0,this._htOption.correctLevel),this._oQRCode.addData(o),this._oQRCode.make(),this._oDrawing.draw(this._oQRCode)},u.prototype.makeCode=function(o){},window.QRCode=y}();
+  </script>
 
   <script>
     const $ = s => document.querySelector(s);
@@ -46,7 +52,7 @@
       return out;
     }
 
-    // Préremplir automatiquement la landing si déployé sur GitHub Pages
+    // Pré-remplit automatiquement la landing si on est sur GitHub Pages
     (function autoFill(){
       const base = location.origin + location.pathname.replace(/\/[^/]*$/,'/');
       $('#landingUrl').value = base + 'landing.html';
@@ -59,21 +65,29 @@
       if(!topic) return err('Renseigne un "Topic ntfy" (ex: qr-scann-test-1).');
       if(!/^https?:\/\/.+\/.+\.html$/i.test(landing)) return err('Mets une URL de landing VALIDE (ex: https://.../landing.html).');
 
+      // Construit l’URL finale
       const id = randId(10);
       const u = new URL(landing);
       u.searchParams.set('topic', topic);
       u.searchParams.set('scan', id);
       const final = u.toString();
 
-      // Lien cliquable
+      // Affiche le lien
       const a = $('#finalUrl'); a.textContent = final; a.href = final;
 
-      // QR standard via Google Chart (image PNG)
-      const img = $('#qrimg');
-      const size = 512; // augmenter si besoin
-      img.src = `https://chart.googleapis.com/chart?cht=qr&chs=${size}x${size}&chld=L|0&choe=UTF-8&chl=${encodeURIComponent(final)}`;
+      // Génère un VRAI QR local standard
+      const container = $('#qrcode');
+      container.innerHTML = ''; // reset
+      new QRCode(container, {
+        text: final,
+        width: 320,
+        height: 320,
+        colorDark: "#000000",
+        colorLight: "#ffffff",
+        correctLevel: 0 // L
+      });
 
-      // Lien vers le topic ntfy
+      // Lien vers ntfy
       $('#ntfyView').href = `https://ntfy.sh/${encodeURIComponent(topic)}`;
 
       $('#result').style.display='block';
