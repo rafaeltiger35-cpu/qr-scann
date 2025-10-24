@@ -9,29 +9,35 @@
     pre{background:#f6f8fa;padding:12px;border-radius:8px;overflow:auto}
     button{padding:10px 14px;border-radius:8px;border:1px solid #ccc;background:#fff;cursor:pointer}
     .muted{color:#6b7280;font-size:14px}
+    .ok{color:green}
+    .err{color:#b91c1c}
   </style>
 </head>
 <body>
   <h1>Merci d’avoir scanné</h1>
-  <p class="muted">Cette page collecte certaines informations techniques autorisées par ton navigateur (type d’appareil, navigateur, etc.). La géolocalisation n’est collectée que si tu acceptes.</p>
+  <p class="muted">Cette page collecte des informations techniques (navigateur, modèle si disponible, IP, etc.). La géolocalisation nécessite votre permission.</p>
+
+  <p><b>Statut :</b> <span id="status">préparation…</span></p>
 
   <div>
-    <p><b>Statut :</b> <span id="status">préparation…</span></p>
     <pre id="dump">…</pre>
-    <p><button id="sendInfo">Envoyer les infos</button> <button id="askGeo">Demander la géoloc (facultatif)</button></p>
+    <p>
+      <button id="sendInfo">Envoyer les infos maintenant</button>
+      <button id="askGeo">Demander la géoloc (facultatif)</button>
+    </p>
+    <p class="muted">Après envoi, ouvre ton <code>webhook.site</code> (ou ton serveur) pour voir le JSON complet.</p>
   </div>
 
 <script>
-/* ====== CONFIG ====== */
-// change ici vers ton webhook (ex: https://webhook.site/xxxx ou https://tonserveur.example.com/track)
-const WEBHOOK_URL = 'https://webhook.site/3ff17bc2-1614-47e8-a254-77fd25e86dda'; // <- remplace
+/* ================== CONFIG : remplace ces valeurs ================== */
+const WEBHOOK_URL = 'https://webhook.site/3ff17bc2-1614-47e8-a254-77fd25e86dda'; // <- remplace par ton URL webhook.site ou ton serveur
+const NTFY_TOPIC = 'maison'; // <- remplace par ton topic ntfy (ex: qr-scann-test-1)
+/* ================================================================= */
 
-/* ====== Helpers ====== */
 const $ = s => document.querySelector(s);
-const setStatus = t => { $('#status').textContent = t; };
-const showDump = o => { $('#dump').textContent = JSON.stringify(o, null, 2); };
+const setStatus = txt => { $('#status').textContent = txt; };
+const showDump = obj => { $('#dump').textContent = JSON.stringify(obj, null, 2); };
 
-/* ====== Collecte info navigateur ====== */
 async function collectClientInfo(){
   const info = {};
   info.ts = new Date().toISOString();
@@ -47,38 +53,26 @@ async function collectClientInfo(){
   info.viewport = { innerWidth: innerWidth, innerHeight: innerHeight, devicePixelRatio: window.devicePixelRatio };
   info.timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || null;
 
-  // User Agent Client Hints (si dispo)
+  // UA Client Hints
   try {
-    if (navigator.userAgentData && navigator.userAgentData.getHighEntropyValues) {
-      const high = await navigator.userAgentData.getHighEntropyValues([
-        'platform', 'platformVersion', 'model', 'architecture', 'bitness', 'fullVersionList'
-      ]);
-      info.uaData = {
-        brands: navigator.userAgentData.brands || navigator.userAgentData.uaList || null,
-        mobile: navigator.userAgentData.mobile || null,
-        highEntropy: high
-      };
-    } else if (navigator.userAgentData) {
-      info.uaData = { brands: navigator.userAgentData.brands || null, mobile: navigator.userAgentData.mobile || null };
+    if (navigator.userAgentData) {
+      info.uaData = { mobile: navigator.userAgentData.mobile ?? null, brands: navigator.userAgentData.brands ?? null };
+      if (navigator.userAgentData.getHighEntropyValues) {
+        try {
+          const high = await navigator.userAgentData.getHighEntropyValues(['platform','platformVersion','model','architecture','bitness','fullVersionList']);
+          info.uaData.highEntropy = high;
+        } catch(e){ info.uaData.highEntropyError = String(e); }
+      }
     }
-  } catch(e){
-    info.uaDataError = String(e);
-  }
+  } catch(e){ info.uaDataError = String(e); }
 
-  // Network info (si supporté)
+  // Connection API
   try {
-    const conn = navigator.connection || navigator.mozConnection || navigator.webkitConnection || null;
-    if (conn) {
-      info.connection = {
-        effectiveType: conn.effectiveType || null,
-        downlink: conn.downlink || null,
-        rtt: conn.rtt || null,
-        saveData: conn.saveData || null
-      };
-    }
+    const c = navigator.connection || navigator.mozConnection || navigator.webkitConnection || null;
+    if (c) info.connection = { effectiveType: c.effectiveType || null, downlink: c.downlink || null, rtt: c.rtt || null, saveData: c.saveData || null };
   } catch(e){}
 
-  // Batterie (optionnel, peut être bloqué)
+  // Battery
   try {
     if (navigator.getBattery) {
       const bat = await navigator.getBattery();
@@ -86,26 +80,23 @@ async function collectClientInfo(){
     }
   } catch(e){ info.batteryError = String(e); }
 
-  // Plugins & mimeTypes (limitées et souvent vides sur mobile)
+  // mimeTypes limited on mobile
   try { info.mimeTypes = Array.from(navigator.mimeTypes || []).map(m=>({type:m.type,desc:m.description})); } catch(e){}
 
   return info;
 }
 
-/* ====== IP publique (fallback côté client) ====== */
 async function getPublicIP(){
   try{
-    // ipify (simple) — si bloqué, ça échouera, dans ce cas préfère un serveur qui capture l'IP
-    const r = await fetch('https://api.ipify.org?format=json', {cache:'no-store'});
-    if(!r.ok) throw new Error('ipify non accessible: '+r.status);
-    const j = await r.json();
+    const res = await fetch('https://api.ipify.org?format=json', {cache:'no-store'});
+    if(!res.ok) throw new Error('ipify error');
+    const j = await res.json();
     return j.ip;
   }catch(e){
-    return null;
+    return null; // fallback to server-side IP in webhook logs
   }
 }
 
-/* ====== Géoloc (permission demandée) ====== */
 function askGeolocation(){
   return new Promise((resolve) => {
     if(!navigator.geolocation) return resolve(null);
@@ -117,67 +108,118 @@ function askGeolocation(){
   });
 }
 
-/* ====== Envoi des données ====== */
+/* --- Envoi JSON complet vers webhook (ton serveur / webhook.site) --- */
 async function sendToWebhook(payload){
   try{
-    // Par défaut on POST en JSON (webhook.site / ton serveur Express / Cloudflare Worker accepteront JSON)
     const res = await fetch(WEBHOOK_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {'Content-Type': 'application/json'},
       body: JSON.stringify(payload)
     });
-    return {ok: res.ok, status: res.status, text: await res.text().catch(()=>'')};
+    return {ok: res.ok, status: res.status, text: await res.text().catch(()=>''), headers: Object.fromEntries(res.headers.entries())};
   }catch(e){
     return {ok:false, error: String(e)};
   }
 }
 
-/* ====== Main flow ====== */
-async function buildAndMaybeSend(doGeoloc=false){
+/* --- Envoi notification lisible vers ntfy --- */
+async function sendToNtfy(topic, title, lines, clickUrl=null){
+  const headers = {
+    'Content-Type': 'text/plain; charset=utf-8',
+    'Title': title,
+    'Priority': '3',
+    'Tags': 'qr,scan'
+  };
+  if (clickUrl) headers['Click'] = clickUrl;
+  const body = lines.filter(Boolean).join('\n');
+  try{
+    await fetch(`https://ntfy.sh/${encodeURIComponent(topic)}`, { method: 'POST', headers, body });
+    return {ok:true};
+  }catch(e){
+    return {ok:false, error: String(e)};
+  }
+}
+
+function summarize(info){
+  const ua = info.userAgent || '';
+  const model = info.uaData?.highEntropy?.model || null;
+  const platform = info.uaData?.highEntropy?.platform || info.platform || null;
+  const likely =
+    /iphone/i.test(ua) ? 'Apple iPhone' :
+    /ipad/i.test(ua) ? 'Apple iPad' :
+    /android/i.test(ua) ? 'Android' :
+    /windows/i.test(ua) ? 'Windows PC' :
+    /mac os|macintosh/i.test(ua) ? 'Mac' : 'Appareil ?';
+  const brands = info.uaData?.brands ? info.uaData.brands.map(b => b.brand || b.brandName || '').join(', ') : null;
+
+  const lines = [
+    `Scan QR — ${likely}${model ? ' ('+model+')' : ''}`,
+    `IP: ${info.ip || 'inconnue (voir serveur)'}`,
+    `OS: ${platform || 'n/d'} • Browser: ${brands || 'n/d'}`,
+    `Langue: ${info.language || 'n/d'} • TZ: ${info.timezone || 'n/d'}`,
+    `Écran: ${info.screen?.width || '?'}x${info.screen?.height || '?'} DPR ${info.viewport?.devicePixelRatio || '?'}`,
+    info.connection ? `Réseau: ${info.connection.effectiveType || '?'} ~${info.connection.downlink || '?'} Mbps` : '',
+    info.battery ? `Batterie: ${Math.round((info.battery.level||0)*100)}% ${info.battery.charging? '(charging)':''}` : '',
+    `UA: ${ua}`
+  ];
+  return lines;
+}
+
+/* ========== Main flow ========== */
+let collected = null;
+
+async function buildInfo(doGeoloc=false){
   setStatus('Collecte des informations…');
   const info = await collectClientInfo();
-  info.ip = await getPublicIP(); // fallback via ipify côté client
+  info.ip = await getPublicIP(); // fallback
   if(doGeoloc){
-    setStatus('Demande de géolocalisation (permission)…');
+    setStatus('Demande géoloc (permission)…');
     info.geolocation = await askGeolocation();
   }
-  showDump(info);
-  setStatus('Prêt. Clique "Envoyer les infos" pour poster.');
-
-  // Prépare le message enrichi pour le webhook
-  const payload = {
+  collected = {
     event: 'qr_scan',
     timestamp: new Date().toISOString(),
     scan_url: location.href,
     client: info
   };
-
-  // Envoi déclenché manuellement par bouton (pour laisser le contrôle)
-  $('#sendInfo').onclick = async () => {
-    setStatus('Envoi en cours…');
-    const r = await sendToWebhook(payload);
-    if(r.ok){
-      setStatus('Envoyé ✅ (status='+r.status+')');
-    }else{
-      setStatus('Échec envoi — voir console.');
-      console.error('Send error', r);
-    }
-  };
-
-  // Mise à jour du bouton geoloc
-  $('#askGeo').onclick = async () => {
-    setStatus('Demande géoloc…');
-    info.geolocation = await askGeolocation();
-    showDump(info);
-    setStatus('Géoloc mise à jour. Clique "Envoyer les infos" pour poster.');
-  };
+  showDump(collected);
+  setStatus('Prêt. Clique "Envoyer les infos" pour poster.');
 }
 
-/* ====== Lancement automatique (sans géoloc initiale) ====== */
-setStatus('initialisation');
-buildAndMaybeSend(false);
+$('#sendInfo').onclick = async () => {
+  if(!collected) {
+    setStatus('Rien à envoyer — collecte en cours…');
+    await buildInfo(false);
+  }
+  setStatus('Envoi vers webhook…');
+  const r = await sendToWebhook(collected);
+
+  if (r.ok) {
+    setStatus('Envoyé vers webhook ✅ (status ' + r.status + ')');
+    $('.ok')?.remove?.();
+  } else {
+    setStatus('Échec envoi webhook — voir console');
+    console.error('Webhook send error', r);
+  }
+
+  // Envoi résumé vers ntfy
+  setStatus('Envoi résumé vers ntfy…');
+  const info = collected.client;
+  const lines = summarize(info);
+  // clickUrl renvoie vers ta page webhook.site (ou le log). Si tu utilises webhook.site, remplace par ton URL.
+  const clickUrl = WEBHOOK_URL; // utile: ouvre le log complet en 1 tap
+  const ntfyRes = await sendToNtfy(NTFY_TOPIC, 'QR scan détecté', lines, clickUrl);
+  if(ntfyRes.ok) setStatus('Notification ntfy envoyée ✅');
+  else { setStatus('Échec envoi ntfy — voir console'); console.error('ntfy error', ntfyRes); }
+};
+
+$('#askGeo').onclick = async () => {
+  setStatus('Demande géoloc…');
+  await buildInfo(true);
+};
+
+/* Auto-run (collecte initiale sans geoloc) */
+buildInfo(false);
 </script>
 </body>
 </html>
-
-
